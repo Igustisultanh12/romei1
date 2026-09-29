@@ -10,7 +10,10 @@ import {
     WalletIcon,
     CreditCardIcon,
     QrCodeIcon,
-    XMarkIcon
+    XMarkIcon,
+    ArrowTopRightOnSquareIcon,
+    ClipboardDocumentIcon,
+    ClipboardDocumentCheckIcon
 } from '@heroicons/vue/24/outline';
 import axios from 'axios';
 
@@ -35,6 +38,20 @@ const isRefreshing = ref(false); // State loader untuk tombol tes ulang koneksi
 const showDokuModal = ref(false);
 const activePaymentUrl = ref('');
 const currentInvoiceId = ref('');
+const dokuViewMode = ref('barcode'); // 'barcode' atau 'full'
+const copiedInvoice = ref(false);
+
+const copyInvoiceNumber = async () => {
+    if (!currentInvoiceId.value) return;
+    try {
+        await navigator.clipboard.writeText(currentInvoiceId.value);
+        copiedInvoice.value = true;
+        setTimeout(() => { copiedInvoice.value = false; }, 2000);
+    } catch (e) {
+        copiedInvoice.value = true;
+        setTimeout(() => { copiedInvoice.value = false; }, 2000);
+    }
+};
 
 // State untuk Notifikasi Alert Toast di Pojok Layar
 const toastNotification = ref(null);
@@ -99,8 +116,9 @@ const runPaymentSimulation = () => {
         if (response.data.status === 'success' && response.data.payment_url) {
             currentInvoiceId.value = response.data.invoice_id;
             activePaymentUrl.value = response.data.payment_url;
+            dokuViewMode.value = 'barcode';
             
-            // LANGSUNG MUNCULKAN secara POPUP OVERLAY IFRAME DI DALAM HALAMAN
+            // LANGSUNG MUNCULKAN secara POPUP OVERLAY DI DALAM HALAMAN
             showDokuModal.value = true;
 
             showToast('info', 'Portal Terbuka', 'Silakan lakukan scan / penyelesaian pembayaran pada popup internal.');
@@ -183,20 +201,115 @@ onBeforeUnmount(() => {
                 </div>
             </div>
 
-            <div v-if="showDokuModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div v-if="showDokuModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
                 <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity" @click="closeDokuModalManual"></div>
 
-                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg h-[80vh] flex flex-col shadow-2xl transform transition-all relative z-10 overflow-hidden">
-                    <div class="px-4 py-3 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span class="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider font-mono">Invoice: {{ currentInvoiceId }}</span>
+                <div 
+                    class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full flex flex-col shadow-2xl transform transition-all relative z-10 overflow-hidden"
+                    :class="dokuViewMode === 'barcode' ? 'max-w-md max-h-[92vh]' : 'max-w-2xl h-[85vh]'"
+                >
+                    <!-- Header Modal Transaksi -->
+                    <div class="px-4 py-3 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                            <span class="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider font-mono truncate">
+                                {{ currentInvoiceId }}
+                            </span>
                         </div>
-                        <button @click="closeDokuModalManual" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
-                            <XMarkIcon class="w-5 h-5" />
-                        </button>
+
+                        <div class="flex items-center gap-2 shrink-0">
+                            <!-- Toggle Mode: Barcode Saja vs Halaman Penuh -->
+                            <div class="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 p-0.5 bg-slate-100 dark:bg-slate-800/80 text-[11px] font-bold">
+                                <button 
+                                    type="button"
+                                    @click="dokuViewMode = 'barcode'"
+                                    :class="dokuViewMode === 'barcode' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'"
+                                    class="px-2.5 py-1 rounded-md transition"
+                                >
+                                    Barcode Saja
+                                </button>
+                                <button 
+                                    type="button"
+                                    @click="dokuViewMode = 'full'"
+                                    :class="dokuViewMode === 'full' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'"
+                                    class="px-2.5 py-1 rounded-md transition"
+                                >
+                                    Penuh
+                                </button>
+                            </div>
+
+                            <button @click="closeDokuModalManual" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800">
+                                <XMarkIcon class="w-5 h-5" />
+                            </button>
+                        </div>
                     </div>
-                    <div class="flex-1 bg-white">
+
+                    <!-- MODE 1: TAMPILAN FOKUS BARCODE QRIS SAJA (SEPERTI GAMBAR 2) -->
+                    <div v-if="dokuViewMode === 'barcode'" class="p-4 sm:p-5 flex flex-col items-center overflow-y-auto">
+                        
+                        <!-- Rincian Singkat Nominal & Status -->
+                        <div class="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 mb-3">
+                            <div>
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Pembayaran</span>
+                                <span class="text-base font-extrabold text-slate-900 dark:text-white font-mono">
+                                    {{ formatRupiah(txAmount) }}
+                                </span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Metode</span>
+                                <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                    <QrCodeIcon class="w-3.5 h-3.5" /> QRIS Live
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- KOTAK BARCODE FOKUS QRIS (VIEWPORT CLIPPING DOKU DENGAN PRESISI GAMBAR 2) -->
+                        <div class="relative w-[340px] h-[375px] mx-auto overflow-hidden rounded-2xl bg-[#FAFAFA] dark:bg-white border-2 border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center">
+                            <iframe 
+                                :src="activePaymentUrl" 
+                                class="absolute border-0 select-none pointer-events-none"
+                                style="width: 440px; height: 860px; top: -448px; left: 50%; transform: translateX(-50%);"
+                                scrolling="no"
+                            ></iframe>
+                        </div>
+
+                        <!-- Petunjuk Pemindaian Barcode -->
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 text-center mt-3 max-w-xs leading-relaxed">
+                            Arahkan kamera aplikasi <strong>m-Banking</strong> atau <strong>E-Wallet</strong> (BCA, Mandiri, BRI, GoPay, OVO, DANA, ShopeePay) ke barcode di atas untuk menyelesaikan transaksi.
+                        </p>
+
+                        <!-- Indikator Polling Realtime Otomatis -->
+                        <div class="mt-3 flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-3 py-1.5 rounded-full border border-blue-200 dark:border-blue-900/60">
+                            <ArrowPathIcon class="w-3.5 h-3.5 animate-spin" />
+                            <span class="text-[11px] font-semibold">Menanti konfirmasi pembayaran otomatis...</span>
+                        </div>
+
+                        <!-- Footer Bantuan: Salin Invoice & Buka Tab Baru -->
+                        <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 w-full flex items-center justify-between text-xs text-slate-500">
+                            <button 
+                                type="button" 
+                                @click="copyInvoiceNumber" 
+                                class="text-[11px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1 transition"
+                            >
+                                <ClipboardDocumentCheckIcon v-if="copiedInvoice" class="w-3.5 h-3.5 text-emerald-500" />
+                                <ClipboardDocumentIcon v-else class="w-3.5 h-3.5" />
+                                <span>{{ copiedInvoice ? 'Invoice Tersalin!' : 'Salin Invoice' }}</span>
+                            </button>
+
+                            <a 
+                                :href="activePaymentUrl" 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                class="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold"
+                            >
+                                <span>Buka Halaman DOKU</span>
+                                <ArrowTopRightOnSquareIcon class="w-3 h-3" />
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- MODE 2: TAMPILAN LENGKAP HALAMAN ASLI DOKU -->
+                    <div v-else class="flex-1 bg-white">
                         <iframe :src="activePaymentUrl" class="w-full h-full border-0" allow="geolocation; microphone; camera font-mono"></iframe>
                     </div>
                 </div>
