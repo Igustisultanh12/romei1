@@ -20,7 +20,18 @@ const qrisPaymentUrl = ref('');
 const activeTransactionNumber = ref('');
 const isGenerating = ref(false);
 const walletViewMode = ref('barcode'); // 'barcode' atau 'full'
+const barcodeTopOffset = ref(parseInt(localStorage.getItem('romei_qris_top_offset') || '-535'));
 let pollingInterval = null;
+
+const adjustOffset = (delta) => {
+    barcodeTopOffset.value += delta;
+    localStorage.setItem('romei_qris_top_offset', barcodeTopOffset.value.toString());
+};
+
+const resetOffset = () => {
+    barcodeTopOffset.value = -535;
+    localStorage.removeItem('romei_qris_top_offset');
+};
 
 const depositForm = useForm({
     amount: ''
@@ -271,13 +282,48 @@ const isRefund = (tx) => {
                         </div>
 
                         <!-- KOTAK BARCODE FOKUS QRIS -->
-                        <div class="relative w-[340px] h-[375px] mx-auto overflow-hidden rounded-2xl bg-[#FAFAFA] border-2 border-gray-200 shadow-md flex items-center justify-center">
+                        <div class="relative w-[340px] h-[340px] mx-auto overflow-hidden rounded-2xl bg-[#FAFAFA] border-2 border-gray-200 shadow-md flex items-center justify-center">
                             <iframe 
                                 :src="qrisPaymentUrl" 
                                 class="absolute border-0 select-none pointer-events-none" 
-                                style="width: 440px; height: 860px; top: -448px; left: 50%; transform: translateX(-50%);"
+                                :style="{
+                                    width: '440px',
+                                    height: '920px',
+                                    top: `${barcodeTopOffset}px`,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)'
+                                }"
                                 scrolling="no"
                             ></iframe>
+                        </div>
+
+                        <!-- Kontrol Presisi Posisi (Mikro Penyesuaian) -->
+                        <div class="flex items-center justify-center gap-2 text-[10px] text-gray-400">
+                            <span>Penyesuaian Barcode:</span>
+                            <button 
+                                type="button" 
+                                @click="adjustOffset(5)" 
+                                class="px-2 py-0.5 rounded border border-gray-200 bg-white hover:bg-gray-50 font-mono font-bold text-gray-600"
+                                title="Geser Turun 5px"
+                            >
+                                Turun
+                            </button>
+                            <button 
+                                type="button" 
+                                @click="adjustOffset(-5)" 
+                                class="px-2 py-0.5 rounded border border-gray-200 bg-white hover:bg-gray-50 font-mono font-bold text-gray-600"
+                                title="Geser Naik 5px"
+                            >
+                                Naik
+                            </button>
+                            <button 
+                                v-if="barcodeTopOffset !== -535"
+                                type="button" 
+                                @click="resetOffset" 
+                                class="px-1.5 py-0.5 text-indigo-600 hover:underline"
+                            >
+                                Reset
+                            </button>
                         </div>
 
                         <p class="text-xs text-gray-500 font-medium px-2 leading-relaxed">
