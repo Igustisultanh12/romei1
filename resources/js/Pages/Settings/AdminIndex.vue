@@ -12,7 +12,10 @@ import {
     WrenchScrewdriverIcon,
     CheckCircleIcon,
     ArrowPathIcon,
-    ExclamationTriangleIcon
+    ExclamationTriangleIcon,
+    GlobeAltIcon,
+    ClipboardDocumentIcon,
+    ClipboardDocumentCheckIcon
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -38,6 +41,57 @@ const form = useForm({
 const imagePreview = ref(props.settings.beranda_image_url || null);
 const testingCeirku = ref(false);
 const ceirkuTestResult = ref(null);
+const currentServerIp = ref(props.settings.server_ip || '127.0.0.1');
+const copiedIp = ref(false);
+const isDetectingIp = ref(false);
+
+const copyServerIp = async () => {
+    if (!currentServerIp.value) return;
+    try {
+        await navigator.clipboard.writeText(currentServerIp.value);
+        copiedIp.value = true;
+        setTimeout(() => {
+            copiedIp.value = false;
+        }, 2500);
+    } catch (e) {
+        const textarea = document.createElement('textarea');
+        textarea.value = currentServerIp.value;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        copiedIp.value = true;
+        setTimeout(() => {
+            copiedIp.value = false;
+        }, 2500);
+    }
+};
+
+const refreshServerIp = async () => {
+    isDetectingIp.value = true;
+    try {
+        const response = await axios.post(route('admin.settings.detect-ip'));
+        if (response.data.success && response.data.ip) {
+            currentServerIp.value = response.data.ip;
+            Swal.fire({
+                title: 'IP Terdeteksi',
+                text: `IP Publik Server ROMEI: ${response.data.ip}`,
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        }
+    } catch (err) {
+        Swal.fire({
+            title: 'Deteksi Gagal',
+            text: 'Gagal mendeteksi IP publik server secara realtime.',
+            icon: 'error',
+            confirmButtonColor: '#ef4444'
+        });
+    } finally {
+        isDetectingIp.value = false;
+    }
+};
 
 const testCeirkuConnection = async () => {
     if (!form.ceirku_api_url) {
@@ -153,6 +207,61 @@ const saveSettings = () => {
                     </div>
 
                     <div class="space-y-4">
+                        <!-- INFORMASI IP PUBLIK SERVER ROMEI (WHITELIST GATEWAY VENDOR CEIRKU) -->
+                        <div class="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/70 via-white to-blue-50/40 dark:from-slate-800/80 dark:via-slate-800/50 dark:to-indigo-950/20">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 mb-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                                        <GlobeAltIcon class="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                                IP Publik Server ROMEI
+                                            </span>
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                Whitelist Vendor
+                                            </span>
+                                        </div>
+                                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                            Berikan alamat IP publik ini ke vendor/admin CEIRKU untuk didaftarkan pada IP Whitelist agar permohonan IMEI & Roamer tidak diblokir.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button 
+                                    type="button" 
+                                    @click="refreshServerIp" 
+                                    :disabled="isDetectingIp"
+                                    class="self-start sm:self-auto px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                                    title="Deteksi ulang IP publik server saat ini"
+                                >
+                                    <ArrowPathIcon class="w-3.5 h-3.5" :class="{ 'animate-spin': isDetectingIp }" />
+                                    <span>{{ isDetectingIp ? 'Mendeteksi...' : 'Deteksi Ulang' }}</span>
+                                </button>
+                            </div>
+
+                            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                <div class="flex-1 flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-700/80 shadow-inner">
+                                    <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Alamat IP:</span>
+                                    <span class="font-mono text-sm sm:text-base font-extrabold text-indigo-600 dark:text-indigo-400 tracking-wider select-all">
+                                        {{ currentServerIp || 'Tidak terdeteksi' }}
+                                    </span>
+                                </div>
+                                <button 
+                                    type="button" 
+                                    @click="copyServerIp"
+                                    class="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm"
+                                    :class="copiedIp ? 'bg-emerald-600 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'"
+                                >
+                                    <ClipboardDocumentCheckIcon v-if="copiedIp" class="w-4 h-4" />
+                                    <ClipboardDocumentIcon v-else class="w-4 h-4" />
+                                    <span>{{ copiedIp ? 'IP Berhasil Disalin!' : 'Salin IP Server' }}</span>
+                                </button>
+                            </div>
+                        </div>
+
                         <div>
                             <div class="flex items-center justify-between mb-1">
                                 <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">

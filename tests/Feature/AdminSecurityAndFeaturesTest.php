@@ -18,7 +18,11 @@ class AdminSecurityAndFeaturesTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Http::fake();
+        Http::fake([
+            '*ipify*'   => Http::response(['ip' => '103.28.12.99'], 200),
+            '*/balance' => Http::response(['status' => true, 'data' => ['credit' => 500000]], 200),
+            '*'         => Http::response([], 200),
+        ]);
         Setting::set('admin_2fa_enabled', '1');
     }
 
@@ -219,5 +223,36 @@ class AdminSecurityAndFeaturesTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertEquals('approved', $feedback->fresh()->status);
+    }
+
+    public function test_admin_can_detect_public_server_ip(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $response = $this->actingAs($admin)
+            ->withSession(['admin_2fa_verified' => true])
+            ->postJson(route('admin.settings.detect-ip'));
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'ip'      => '103.28.12.99',
+            ]);
+    }
+
+    public function test_admin_settings_page_contains_server_ip(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $response = $this->actingAs($admin)
+            ->withSession(['admin_2fa_verified' => true])
+            ->get(route('admin.settings'));
+
+        $response->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('Settings/AdminIndex')
+                ->has('settings.server_ip')
+                ->where('settings.server_ip', '103.28.12.99')
+            );
     }
 }

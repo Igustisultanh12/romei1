@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 
 class SettingController extends Controller
@@ -29,6 +31,9 @@ class SettingController extends Controller
 
         return Inertia::render('Settings/AdminIndex', [
             'settings' => [
+                // IP PUBLIK SERVER ROMEI (WHITELIST GATEWAY VENDOR)
+                'server_ip'              => $this->getPublicServerIp(),
+
                 // PENGATURAN INTEGRASI GATEWAY CEIRKU (SESUAI DOKUMEN RESMI)
                 'ceirku_mode'            => Setting::get('ceirku_mode', 'sandbox'), // sandbox atau live
                 'ceirku_api_url'         => Setting::get('ceirku_api_url', Setting::get('ceirku_url', 'https://ceirku.net/api/v1')),
@@ -200,5 +205,61 @@ class SettingController extends Controller
                 'message'     => "Gagal terhubung ke {$rawUrl}: " . $e->getMessage(),
             ], 422);
         }
+    }
+
+    /**
+     * Mendapatkan alamat IP Publik server ROMEI untuk keperluan whitelisting vendor (CEIRKU, Mail, dll)
+     */
+    protected function getPublicServerIp(): string
+    {
+        return Cache::remember('romei_server_public_ip', 21600, function () { // Cache selama 6 jam
+            $providers = [
+                'https://api.ipify.org?format=json' => function ($res) {
+                    return $res->json('ip');
+                },
+                'https://ifconfig.me/ip' => function ($res) {
+                    return trim($res->body());
+                },
+                'https://icanhazip.com' => function ($res) {
+                    return trim($res->body());
+                },
+            ];
+
+            foreach ($providers as $url => $extractor) {
+                try {
+                    $response = Http::timeout(4)->get($url);
+                    if ($response->successful()) {
+                        $ip = $extractor($response);
+                        if ($ip && filter_var($ip, FILTER_VALIDATE_IP)) {
+                            return $ip;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    continue;
+                }
+            }
+
+            // Fallback ke server variable atau local host IP
+            $fallbackIp = request()->server('SERVER_ADDR') 
+                ?? gethostbyname(gethostname()) 
+                ?? '127.0.0.1';
+
+            return filter_var($fallbackIp, FILTER_VALIDATE_IP) ? $fallbackIp : '127.0.0.1';
+        });
+    }
+
+    /**
+     * Deteksi ulang IP publik server ROMEI secara realtime via AJAX
+     */
+    public function detectIp()
+    {
+        Cache::forget('romei_server_public_ip');
+        $ip = $this->getPublicServerIp();
+
+        return response()->json([
+            'success' => true,
+            'ip'      => $ip,
+            'message' => 'IP Publik server ROMEI berhasil dideteksi.',
+        ]);
     }
 }

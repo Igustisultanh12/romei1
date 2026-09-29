@@ -348,6 +348,7 @@ Route::middleware(['auth', EnsureAdmin2FaVerified::class])->prefix('admin')->nam
         Route::get('/settings', [AdminSettingController::class, 'index'])->name('settings');
         Route::post('/settings/update', [AdminSettingController::class, 'update'])->name('settings.update');
         Route::post('/settings/test-ceirku', [AdminSettingController::class, 'testCeirku'])->name('settings.test-ceirku');
+        Route::post('/settings/detect-ip', [AdminSettingController::class, 'detectIp'])->name('settings.detect-ip');
 
         Route::prefix('feedbacks')->name('feedbacks.')->group(function () {
             Route::get('/', [AdminFeedbackController::class, 'index'])->name('index');
