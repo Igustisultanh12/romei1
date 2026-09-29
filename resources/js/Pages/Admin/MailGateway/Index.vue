@@ -230,7 +230,7 @@ const sendTestEmail = () => {
                             {{ form.admin_2fa_enabled === '1' ? 'Aktif (Proteksi Penuh)' : 'Nonaktif' }}
                         </h3>
                         <p class="text-[11px] font-semibold" :class="form.admin_2fa_enabled === '1' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'">
-                            {{ form.admin_2fa_enabled === '1' ? 'Wajib Verifikasi OTP Email' : 'Login Standar' }}
+                            {{ form.admin_2fa_enabled === '1' ? 'Wajib Verifikasi OTP (WhatsApp / Email)' : 'Login Standar' }}
                         </p>
                     </div>
                     <div class="w-11 h-11 rounded-lg flex items-center justify-center" :class="form.admin_2fa_enabled === '1' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'">

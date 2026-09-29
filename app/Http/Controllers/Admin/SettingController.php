@@ -141,4 +141,64 @@ class SettingController extends Controller
 
         return back()->with('flash', ['message' => 'Konfigurasi Mode API CEIRKU, Skema Tarif Finansial, dan Aset Gambar Beranda berhasil diperbarui!']);
     }
+
+    /**
+     * Uji koneksi jembatan API Gateway CEIRKU secara realtime
+     */
+    public function testCeirku(Request $request)
+    {
+        $request->validate([
+            'ceirku_api_url' => 'required|url',
+            'ceirku_api_key' => 'nullable|string',
+        ]);
+
+        $rawUrl = rtrim(trim($request->ceirku_api_url), '/');
+        if (!str_contains($rawUrl, '/api/')) {
+            $rawUrl .= '/api/v1';
+        }
+
+        $balanceUrl = $rawUrl . '/balance';
+        $startTime = microtime(true);
+
+        try {
+            $apiKey = $request->ceirku_api_key ?: Setting::get('ceirku_api_key', '');
+            $response = \Illuminate\Support\Facades\Http::timeout(6)
+                ->withHeaders([
+                    'X-Api-Key' => $apiKey,
+                    'Accept'    => 'application/json',
+                ])
+                ->post($balanceUrl);
+
+            $latency = round((microtime(true) - $startTime) * 1000) . 'ms';
+            $statusCode = $response->status();
+
+            if ($response->successful() || in_array($statusCode, [200, 401, 403])) {
+                $isAuthOk = $response->successful();
+                return response()->json([
+                    'success'     => true,
+                    'latency'     => $latency,
+                    'status_code' => $statusCode,
+                    'is_auth_ok'  => $isAuthOk,
+                    'message'     => $isAuthOk 
+                        ? "Gateway CEIRKU aktif & responsif ({$latency})! Kredensial valid." 
+                        : "Gateway CEIRKU terhubung ({$latency}, HTTP {$statusCode}). Pastikan API Key benar.",
+                ]);
+            }
+
+            return response()->json([
+                'success'     => false,
+                'latency'     => $latency,
+                'status_code' => $statusCode,
+                'message'     => "Server CEIRKU merespon status HTTP {$statusCode}.",
+            ], 422);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success'     => false,
+                'latency'     => '--',
+                'status_code' => 500,
+                'message'     => "Gagal terhubung ke {$rawUrl}: " . $e->getMessage(),
+            ], 422);
+        }
+    }
 }

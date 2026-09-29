@@ -29,7 +29,15 @@ class AdminTwoFactorController extends Controller
 
         $user = User::find($userId);
         if (!$user) {
-            session()->forget(['admin_2fa_user_id', 'admin_2fa_remember', 'admin_2fa_otp_hash', 'admin_2fa_expires_at', 'admin_2fa_attempts']);
+            session()->forget([
+                'admin_2fa_user_id', 
+                'admin_2fa_remember', 
+                'admin_2fa_otp_hash', 
+                'admin_2fa_expires_at', 
+                'admin_2fa_attempts', 
+                'admin_2fa_sent_at',
+                'admin_2fa_channel'
+            ]);
             return redirect()->route('login');
         }
 
@@ -38,15 +46,27 @@ class AdminTwoFactorController extends Controller
             return redirect()->route('admin.dashboard');
         }
 
-        // Mask email: misal 'admin@domain.com' -> 'a***n@domain.com'
+        // Tentukan channel aktif saat ini (whatsapp atau email)
+        $channel = session('admin_2fa_channel');
+        if (!$channel) {
+            $channel = !empty($user->whatsapp_number) ? 'whatsapp' : 'email';
+            session(['admin_2fa_channel' => $channel]);
+        }
+
+        // Masking kontak
         $maskedEmail = $this->maskEmail($user->email);
+        $maskedPhone = $this->maskPhone($user->whatsapp_number);
 
         $expiresAt = session('admin_2fa_expires_at', now()->addMinutes(10)->timestamp);
         $lastSentAt = session('admin_2fa_sent_at', now()->timestamp);
         $cooldown = max(0, 60 - (now()->timestamp - $lastSentAt));
 
         return Inertia::render('Admin/Auth/TwoFactorChallenge', [
+            'channel'     => $channel,
             'maskedEmail' => $maskedEmail,
+            'maskedPhone' => $maskedPhone,
+            'hasWhatsapp' => !empty($user->whatsapp_number),
+            'hasEmail'    => !empty($user->email),
             'expiresIn'   => max(0, $expiresAt - now()->timestamp),
             'cooldown'    => $cooldown,
         ]);
@@ -78,11 +98,19 @@ class AdminTwoFactorController extends Controller
         // Periksa batasan jumlah percobaan
         $attempts = session('admin_2fa_attempts', 0);
         if ($attempts >= 5) {
-            session()->forget(['admin_2fa_user_id', 'admin_2fa_remember', 'admin_2fa_otp_hash', 'admin_2fa_expires_at', 'admin_2fa_attempts', 'admin_2fa_sent_at']);
+            session()->forget([
+                'admin_2fa_user_id', 
+                'admin_2fa_remember', 
+                'admin_2fa_otp_hash', 
+                'admin_2fa_expires_at', 
+                'admin_2fa_attempts', 
+                'admin_2fa_sent_at',
+                'admin_2fa_channel'
+            ]);
             if (Auth::check()) {
                 Auth::logout();
             }
-            return redirect()->route('login')->withErrors(['email' => 'Batas percobaan OTP terlampaui. Silakan masuk kembali untuk kode baru.']);
+            return redirect()->route('login')->withErrors(['email' => 'Batas percobaan OTP terlampaui (5x). Silakan masuk kembali untuk meminta kode baru demi keamanan akun Anda.']);
         }
 
         // Periksa batas waktu kadaluarsa OTP
@@ -113,12 +141,22 @@ class AdminTwoFactorController extends Controller
             ]);
 
             $remaining = 5 - ($attempts + 1);
-            return back()->withErrors(['code' => "Kode OTP tidak sesuai. Sisa percobaan: {$remaining} kali."]);
+            return back()->withErrors(['code' => "Kode OTP tidak sesuai. Sisa kesempatan percobaan: {$remaining} kali."]);
         }
 
         // Bersihkan state OTP
         $remember = session('admin_2fa_remember', false);
-        session()->forget(['admin_2fa_user_id', 'admin_2fa_remember', 'admin_2fa_otp_hash', 'admin_2fa_expires_at', 'admin_2fa_attempts', 'admin_2fa_sent_at']);
+        $verifiedChannel = session('admin_2fa_channel', 'whatsapp');
+
+        session()->forget([
+            'admin_2fa_user_id', 
+            'admin_2fa_remember', 
+            'admin_2fa_otp_hash', 
+            'admin_2fa_expires_at', 
+            'admin_2fa_attempts', 
+            'admin_2fa_sent_at',
+            'admin_2fa_channel'
+        ]);
         $user->clearTwoFactorOtp();
 
         // Login pengguna jika belum terautentikasi
@@ -135,18 +173,18 @@ class AdminTwoFactorController extends Controller
         AuditLog::create([
             'user_id'     => $user->id,
             'activity'    => 'ADMIN_2FA_SUCCESS',
-            'description' => 'Verifikasi Otentikasi Dua Faktor (2FA) Admin berhasil lolos',
+            'description' => "Verifikasi 2FA Admin berhasil lolos via kanal {$verifiedChannel}",
             'ip_address'  => $request->ip(),
             'user_agent'  => $request->userAgent(),
         ]);
 
-        Log::info("ROMEI SECURITY: Admin {$user->email} berhasil menyelesaikan 2FA via Mail Gateway.");
+        Log::info("ROMEI SECURITY: Admin {$user->email} berhasil menyelesaikan 2FA via kanal {$verifiedChannel}.");
 
         return redirect()->intended(route('admin.dashboard'));
     }
 
     /**
-     * Kirim ulang kode OTP 2FA ke email & WhatsApp
+     * Kirim ulang kode OTP 2FA (Bisa pilih via WhatsApp atau via Email)
      */
     public function resend(Request $request)
     {
@@ -161,11 +199,21 @@ class AdminTwoFactorController extends Controller
             return redirect()->route('login');
         }
 
+        // Cek kanal pengiriman yang diminta (whatsapp atau email)
+        $channel = $request->input('channel');
+        if (!in_array($channel, ['whatsapp', 'email'])) {
+            $channel = session('admin_2fa_channel', !empty($user->whatsapp_number) ? 'whatsapp' : 'email');
+        }
+
+        if ($channel === 'whatsapp' && empty($user->whatsapp_number)) {
+            return back()->withErrors(['code' => 'Nomor WhatsApp belum terdaftar pada akun Anda. Silakan pilih opsi pengiriman lewat Email.']);
+        }
+
         // Cek cooldown kirim ulang (60 detik)
         $lastSentAt = session('admin_2fa_sent_at', 0);
         if (now()->timestamp - $lastSentAt < 60) {
             $wait = 60 - (now()->timestamp - $lastSentAt);
-            return back()->withErrors(['code' => "Mohon tunggu {$wait} detik sebelum meminta kode OTP baru."]);
+            return back()->withErrors(['code' => "Mohon tunggu {$wait} detik sebelum meminta pengiriman kode OTP baru."]);
         }
 
         $otp = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
@@ -175,6 +223,7 @@ class AdminTwoFactorController extends Controller
             'admin_2fa_expires_at' => now()->addMinutes(10)->timestamp,
             'admin_2fa_attempts'   => 0,
             'admin_2fa_sent_at'    => now()->timestamp,
+            'admin_2fa_channel'    => $channel,
         ]);
 
         $user->forceFill([
@@ -182,40 +231,51 @@ class AdminTwoFactorController extends Controller
             'two_factor_expires_at' => now()->addMinutes(10),
         ])->save();
 
-        // 1. Kirim via Mail Gateway
-        try {
-            Mail::to($user->email)->send(
-                new OtpNotificationMail(
-                    $user->name,
-                    'ADMIN-HQ',
-                    $otp,
-                    'Login Dashboard Admin (2FA)',
-                    '10 Menit'
-                )
-            );
-        } catch (\Throwable $e) {
-            Log::error("Gagal mengirim email 2FA ke {$user->email}: " . $e->getMessage());
-        }
-
-        // 2. Kirim via WhatsApp jika nomor tersedia
-        if (!empty($user->whatsapp_number)) {
+        if ($channel === 'whatsapp') {
             try {
-                $msg = "[SECURITY ROMEI HQ]\n\nKode Verifikasi 2FA Anda: *{$otp}*\n\nBerlaku selama 10 menit. Jangan berikan kode ini kepada siapa pun.";
+                $msg = "[SECURITY ROMEI HQ]\n\nKode Otentikasi 2FA Anda: *{$otp}*\n\nBerlaku selama 10 menit. Jangan berikan kode ini kepada siapa pun demi keamanan akun Administrator ROMEI.";
                 WhatsappService2::sendMessage($user->whatsapp_number, $msg);
             } catch (\Throwable $e) {
-                Log::warning("Gagal mengirim WA 2FA ke {$user->whatsapp_number}: " . $e->getMessage());
+                Log::warning("Gagal mengirim WhatsApp 2FA ke {$user->whatsapp_number}: " . $e->getMessage());
             }
+
+            AuditLog::create([
+                'user_id'     => $user->id,
+                'activity'    => 'ADMIN_2FA_RESEND_WHATSAPP',
+                'description' => "Pengiriman kode OTP 2FA Admin via WhatsApp ke {$user->whatsapp_number}",
+                'ip_address'  => $request->ip(),
+                'user_agent'  => $request->userAgent(),
+            ]);
+
+            $masked = $this->maskPhone($user->whatsapp_number);
+            return back()->with('success', "Kode verifikasi OTP baru telah berhasil dikirimkan ke WhatsApp Anda ({$masked}).");
+        } else {
+            try {
+                Mail::to($user->email)->send(
+                    new OtpNotificationMail(
+                        $user->name,
+                        'ADMIN-HQ',
+                        $otp,
+                        'Login Dashboard Admin (2FA)',
+                        '10 Menit'
+                    )
+                );
+            } catch (\Throwable $e) {
+                Log::error("Gagal mengirim email 2FA ke {$user->email}: " . $e->getMessage());
+                return back()->withErrors(['code' => "Gagal mengirim email: " . $e->getMessage()]);
+            }
+
+            AuditLog::create([
+                'user_id'     => $user->id,
+                'activity'    => 'ADMIN_2FA_RESEND_EMAIL',
+                'description' => "Pengiriman kode OTP 2FA Admin via Email ke {$user->email}",
+                'ip_address'  => $request->ip(),
+                'user_agent'  => $request->userAgent(),
+            ]);
+
+            $masked = $this->maskEmail($user->email);
+            return back()->with('success', "Kode verifikasi OTP baru telah berhasil dikirimkan ke Email Anda ({$masked}). Silakan periksa folder Inbox atau Spambox.");
         }
-
-        AuditLog::create([
-            'user_id'     => $user->id,
-            'activity'    => 'ADMIN_2FA_RESEND',
-            'description' => "Permintaan kirim ulang kode OTP 2FA Admin ke {$user->email}",
-            'ip_address'  => $request->ip(),
-            'user_agent'  => $request->userAgent(),
-        ]);
-
-        return back()->with('success', 'Kode verifikasi OTP baru telah berhasil dikirimkan ke email Anda.');
     }
 
     /**
@@ -223,7 +283,16 @@ class AdminTwoFactorController extends Controller
      */
     public function cancel(Request $request)
     {
-        session()->forget(['admin_2fa_user_id', 'admin_2fa_remember', 'admin_2fa_otp_hash', 'admin_2fa_expires_at', 'admin_2fa_attempts', 'admin_2fa_sent_at', 'admin_2fa_verified']);
+        session()->forget([
+            'admin_2fa_user_id', 
+            'admin_2fa_remember', 
+            'admin_2fa_otp_hash', 
+            'admin_2fa_expires_at', 
+            'admin_2fa_attempts', 
+            'admin_2fa_sent_at', 
+            'admin_2fa_verified',
+            'admin_2fa_channel'
+        ]);
         
         if (Auth::check()) {
             Auth::logout();
@@ -235,7 +304,7 @@ class AdminTwoFactorController extends Controller
     }
 
     /**
-     * Helper untuk masking email
+     * Helper untuk masking email: admin@domain.com -> a***n@domain.com
      */
     private function maskEmail(string $email): string
     {
@@ -255,5 +324,31 @@ class AdminTwoFactorController extends Controller
         }
 
         return $maskedName . '@' . $domain;
+    }
+
+    /**
+     * Helper untuk masking nomor WhatsApp: 08123456789 -> 0812****789 / 628123456789 -> +62 812****789
+     */
+    private function maskPhone(?string $phone): string
+    {
+        if (empty($phone)) {
+            return '-';
+        }
+
+        $clean = preg_replace('/[^\d]/', '', $phone);
+        $len = strlen($clean);
+
+        if ($len < 6) {
+            return $phone;
+        }
+
+        $prefix = substr($clean, 0, 4);
+        $suffix = substr($clean, -3);
+
+        if (str_starts_with($clean, '62')) {
+            return '+62 ' . substr($clean, 2, 3) . '****' . $suffix;
+        }
+
+        return $prefix . '****' . $suffix;
     }
 }

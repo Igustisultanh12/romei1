@@ -13,6 +13,7 @@ import {
     MoonIcon,
     UserGroupIcon,
     ChatBubbleLeftRightIcon,
+    ChatBubbleBottomCenterTextIcon,
     EnvelopeIcon,
     BanknotesIcon,
     ExclamationTriangleIcon
@@ -96,6 +97,10 @@ const logout = () => {
                     <Link :href="route().has('admin.tickets.index') ? route('admin.tickets.index') : '#'" :class="route().current('admin.tickets.index') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
                         <TicketIcon class="w-5 h-5" /> Ticket Bantuan
                     </Link>
+
+                    <Link :href="route().has('admin.feedbacks.index') ? route('admin.feedbacks.index') : '/admin/feedbacks'" :class="$page.url.startsWith('/admin/feedbacks') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
+                        <ChatBubbleBottomCenterTextIcon class="w-5 h-5" /> Ulasan Pelanggan
+                    </Link>
                     
                     <Link :href="route().has('admin.monitoring') ? route('admin.monitoring') : '#'" :class="route().current('admin.monitoring') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
                         <CpuChipIcon class="w-5 h-5" /> Monitoring API
@@ -109,8 +114,13 @@ const logout = () => {
                         <EnvelopeIcon class="w-5 h-5" /> Mail Gateway SMTP
                     </Link>
                     
-                    <Link :href="route('admin.settings')" :class="route().current('admin.settings') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
-                        <Cog6ToothIcon class="w-5 h-5" /> Konfigurasi Sistem
+                    <Link :href="route('admin.settings')" :class="route().current('admin.settings') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center justify-between px-4 py-3 text-xs font-bold rounded-lg transition-all">
+                        <div class="flex items-center gap-3">
+                            <Cog6ToothIcon class="w-5 h-5" /> Konfigurasi Sistem
+                        </div>
+                        <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            CEIRKU
+                        </span>
                     </Link>
                 </nav>
             </div>

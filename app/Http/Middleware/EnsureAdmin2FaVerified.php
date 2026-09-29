@@ -35,6 +35,7 @@ class EnsureAdmin2FaVerified
                     // Jika belum ada OTP aktif di sesi, buat dan kirimkan secara otomatis
                     if (!$request->session()->has('admin_2fa_otp_hash') || now()->timestamp > $request->session()->get('admin_2fa_expires_at', 0)) {
                         $otp = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+                        $channel = !empty($user->whatsapp_number) ? 'whatsapp' : 'email';
 
                         $request->session()->put([
                             'admin_2fa_user_id'    => $user->id,
@@ -42,6 +43,7 @@ class EnsureAdmin2FaVerified
                             'admin_2fa_expires_at' => now()->addMinutes(10)->timestamp,
                             'admin_2fa_attempts'   => 0,
                             'admin_2fa_sent_at'    => now()->timestamp,
+                            'admin_2fa_channel'    => $channel,
                         ]);
 
                         $user->forceFill([
@@ -49,28 +51,26 @@ class EnsureAdmin2FaVerified
                             'two_factor_expires_at' => now()->addMinutes(10),
                         ])->save();
 
-                        // Kirim Email OTP via Mail Gateway
-                        try {
-                            Mail::to($user->email)->send(
-                                new OtpNotificationMail(
-                                    $user->name,
-                                    'ADMIN-HQ',
-                                    $otp,
-                                    'Login Dashboard Admin (2FA)',
-                                    '10 Menit'
-                                )
-                            );
-                        } catch (\Throwable $e) {
-                            Log::error("Gagal mengirim email 2FA ke {$user->email}: " . $e->getMessage());
-                        }
-
-                        // Kirim via WhatsApp jika nomor tersedia
-                        if (!empty($user->whatsapp_number)) {
+                        if ($channel === 'whatsapp') {
                             try {
-                                $msg = "[SECURITY ROMEI HQ]\n\nKode Verifikasi 2FA Anda: *{$otp}*\n\nBerlaku selama 10 menit. Jangan berikan kode ini kepada siapa pun.";
+                                $msg = "[SECURITY ROMEI HQ]\n\nKode Otentikasi 2FA Anda: *{$otp}*\n\nBerlaku selama 10 menit. Jangan berikan kode ini kepada siapa pun demi keamanan akun Administrator ROMEI.";
                                 WhatsappService2::sendMessage($user->whatsapp_number, $msg);
                             } catch (\Throwable $e) {
                                 Log::warning("Gagal mengirim WhatsApp 2FA ke {$user->whatsapp_number}: " . $e->getMessage());
+                            }
+                        } else {
+                            try {
+                                Mail::to($user->email)->send(
+                                    new OtpNotificationMail(
+                                        $user->name,
+                                        'ADMIN-HQ',
+                                        $otp,
+                                        'Login Dashboard Admin (2FA)',
+                                        '10 Menit'
+                                    )
+                                );
+                            } catch (\Throwable $e) {
+                                Log::error("Gagal mengirim email 2FA ke {$user->email}: " . $e->getMessage());
                             }
                         }
                     }

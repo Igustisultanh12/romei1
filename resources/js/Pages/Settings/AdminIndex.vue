@@ -3,13 +3,16 @@ import { useForm, Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue'; 
 import Swal from 'sweetalert2';
+import axios from 'axios';
 import {
     CpuChipIcon,
     CurrencyDollarIcon,
     CreditCardIcon,
     PhotoIcon,
     WrenchScrewdriverIcon,
-    CheckCircleIcon
+    CheckCircleIcon,
+    ArrowPathIcon,
+    ExclamationTriangleIcon
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -33,6 +36,61 @@ const form = useForm({
 });
 
 const imagePreview = ref(props.settings.beranda_image_url || null);
+const testingCeirku = ref(false);
+const ceirkuTestResult = ref(null);
+
+const testCeirkuConnection = async () => {
+    if (!form.ceirku_api_url) {
+        Swal.fire({
+            title: 'URL Kosong',
+            text: 'Harap masukkan URL Gateway CEIRKU terlebih dahulu.',
+            icon: 'warning',
+            confirmButtonColor: '#2563eb'
+        });
+        return;
+    }
+
+    testingCeirku.value = true;
+    ceirkuTestResult.value = null;
+
+    try {
+        const response = await axios.post(route('admin.settings.test-ceirku'), {
+            ceirku_api_url: form.ceirku_api_url,
+            ceirku_api_key: form.ceirku_api_key
+        });
+
+        ceirkuTestResult.value = {
+            success: true,
+            latency: response.data.latency,
+            message: response.data.message,
+            statusCode: response.data.status_code
+        };
+
+        Swal.fire({
+            title: 'Koneksi Berhasil Terhubung',
+            text: response.data.message,
+            icon: 'success',
+            confirmButtonColor: '#2563eb'
+        });
+    } catch (err) {
+        const errorMsg = err.response?.data?.message || 'Gagal menghubungi endpoint CEIRKU.';
+        ceirkuTestResult.value = {
+            success: false,
+            latency: err.response?.data?.latency || '--',
+            message: errorMsg,
+            statusCode: err.response?.data?.status_code || 500
+        };
+
+        Swal.fire({
+            title: 'Koneksi Gagal / Periksa Kredensial',
+            text: errorMsg,
+            icon: 'warning',
+            confirmButtonColor: '#ef4444'
+        });
+    } finally {
+        testingCeirku.value = false;
+    }
+};
 
 const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -96,18 +154,47 @@ const saveSettings = () => {
 
                     <div class="space-y-4">
                         <div>
-                            <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
-                                URL API Gateway CEIRKU (Dinamis)
-                            </label>
-                            <input 
-                                type="text" 
-                                v-model="form.ceirku_api_url" 
-                                placeholder="https://ceirku.net/api/v1" 
-                                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                            />
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                    URL API Gateway CEIRKU (Dinamis)
+                                </label>
+                                <span class="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                                    Dapat disesuaikan kapan saja
+                                </span>
+                            </div>
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input 
+                                    type="text" 
+                                    v-model="form.ceirku_api_url" 
+                                    placeholder="https://ceirku.net/api/v1" 
+                                    class="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                />
+                                <button 
+                                    type="button" 
+                                    @click="testCeirkuConnection" 
+                                    :disabled="testingCeirku"
+                                    class="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/80 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
+                                >
+                                    <ArrowPathIcon v-if="testingCeirku" class="w-4 h-4 animate-spin" />
+                                    <span>{{ testingCeirku ? 'Menguji Gateway...' : 'Uji Koneksi Gateway' }}</span>
+                                </button>
+                            </div>
                             <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                                Base URL gateway CEIRKU (misal: <span class="font-mono text-blue-600 dark:text-blue-400">https://ceirku.net/api/v1</span>). Jika vendor mengganti domain atau endpoint, ubah di sini tanpa menyentuh kode program.
+                                Base URL gateway CEIRKU (contoh: <span class="font-mono text-blue-600 dark:text-blue-400">https://ceirku.net/api/v1</span>). Jika pihak vendor mengubah domain atau link API gateway, ubah langsung di sini dan lakukan pengujian koneksi tanpa perlu mengubah kode program.
                             </p>
+
+                            <!-- Live Test Result Banner -->
+                            <div v-if="ceirkuTestResult" :class="ceirkuTestResult.success ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'" class="mt-2 p-3 rounded-xl border text-xs font-semibold flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <CheckCircleIcon v-if="ceirkuTestResult.success" class="w-4 h-4 text-emerald-500 shrink-0" />
+                                    <ExclamationTriangleIcon v-else class="w-4 h-4 text-rose-500 shrink-0" />
+                                    <span>{{ ceirkuTestResult.message }}</span>
+                                </div>
+                                <span class="font-mono text-[10px] px-2 py-0.5 rounded bg-white/50 dark:bg-black/20">
+                                    Latensi: {{ ceirkuTestResult.latency }}
+                                </span>
+                            </div>
+
                             <div v-if="form.errors.ceirku_api_url" class="text-xs text-red-500 font-semibold mt-1">
                                 {{ form.errors.ceirku_api_url }}
                             </div>
