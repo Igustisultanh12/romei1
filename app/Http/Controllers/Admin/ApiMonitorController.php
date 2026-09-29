@@ -265,6 +265,9 @@ class ApiMonitorController extends Controller
 
             if (!empty($paymentResult['payment_url'])) {
                 Cache::put('payment_status_' . $invoiceId, 'PENDING', 600);
+                if (!empty($paymentResult['invoice_id'])) {
+                    Cache::put('payment_qrqu_id_' . $invoiceId, $paymentResult['invoice_id'], 600);
+                }
 
                 $providerName = ($paymentResult['provider'] ?? 'doku') === 'qrqu' ? 'QRqu' : 'DOKU';
                 return response()->json([
@@ -297,16 +300,48 @@ class ApiMonitorController extends Controller
     {
         $status = Cache::get('payment_status_' . $invoiceId, 'PENDING');
 
-        if ($status === 'SUCCESS') {
+        if (in_array(strtoupper((string) $status), ['SUCCESS', 'PAID'], true)) {
             return response()->json([
-                'status' => 'success',
-                'payment_status' => 'SUCCESS'
+                'status'         => 'success',
+                'payment_status' => 'SUCCESS',
+                'is_paid'        => true,
             ]);
         }
 
+        // Active lookup ke QRqu gateway jika gateway aktif adalah QRqu
+        $activeGateway = \App\Models\Setting::get('active_payment_gateway', 'doku');
+        if ($activeGateway === 'qrqu') {
+            try {
+                $qrquId = Cache::get('payment_qrqu_id_' . $invoiceId, $invoiceId);
+                $qrquService = new \App\Services\Payment\QrquService();
+                $qrquStatus = $qrquService->checkInvoiceStatus($qrquId);
+
+                // Coba invoiceId jika qrquId beda
+                if (!$qrquStatus && $qrquId !== $invoiceId) {
+                    $qrquStatus = $qrquService->checkInvoiceStatus($invoiceId);
+                }
+
+                if (in_array(strtoupper((string) $qrquStatus), ['SUCCESS', 'PAID'], true)) {
+                    Cache::put('payment_status_' . $invoiceId, 'SUCCESS', 600);
+                    if ($qrquId) {
+                        Cache::put('payment_status_' . $qrquId, 'SUCCESS', 600);
+                    }
+                    Log::info("ROMEI MONITOR: Status pembayaran {$invoiceId} dikonfirmasi lunas via aktif poll QRqu.");
+                    return response()->json([
+                        'status'         => 'success',
+                        'payment_status' => 'SUCCESS',
+                        'is_paid'        => true,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                // Silently skip active check errors
+            }
+        }
+
         return response()->json([
-            'status' => 'pending',
-            'payment_status' => 'PENDING'
+            'status'         => 'pending',
+            'payment_status' => 'PENDING',
+            'is_paid'        => false,
         ]);
     }
 

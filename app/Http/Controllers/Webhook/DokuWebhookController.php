@@ -51,6 +51,13 @@ class DokuWebhookController extends Controller {
         }
 
         if (!$transaction) {
+            // Cek apakah invoice pengujian / direct monitoring
+            if ($transactionStatus === 'SUCCESS') {
+                Cache::put('payment_status_' . $invoiceNumber, 'SUCCESS', 600);
+                Log::info("DOKU Webhook Info: Status invoice {$invoiceNumber} berhasil dicache sebagai SUCCESS (Direct/Mock).");
+                return response()->json(['message' => 'Notification Received and Status Cached Successfully'], 200);
+            }
+
             Log::error("DOKU Webhook Error: Invoice {$invoiceNumber} tidak terdaftar di ROMEI.");
             return response()->json(['message' => 'Transaction/Invoice Not Found'], 404);
         }

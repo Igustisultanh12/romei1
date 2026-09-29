@@ -219,6 +219,82 @@ class QrquService
     }
 
     /**
+     * Cek status invoice langsung ke Gateway QRqu
+     * Mendukung invoice_id (INV-2026...) maupun external_id (INV-ROMEI-...)
+     */
+    public function checkInvoiceStatus(string $invoiceId): ?string
+    {
+        try {
+            $baseUrl = self::getBaseUrl();
+            if (empty($baseUrl)) {
+                return null;
+            }
+
+            // 1. Coba polling public checkout status
+            $checkoutUrls = [
+                $baseUrl . '/checkout/' . urlencode($invoiceId) . '/status',
+                $baseUrl . '/api/checkout/' . urlencode($invoiceId) . '/status',
+            ];
+
+            foreach ($checkoutUrls as $url) {
+                try {
+                    $res = Http::timeout(3)->get($url);
+                    if ($res->successful()) {
+                        $json = $res->json();
+                        $status = strtoupper($json['status'] ?? '');
+                        if (!empty($status) && $status !== 'NOT_FOUND') {
+                            return $status;
+                        }
+                    }
+                } catch (\Throwable) {
+                    // Coba endpoint selanjutnya
+                }
+            }
+
+            // 2. Fallback: Authenticated Merchant API
+            $apiKey = self::getApiKey();
+            $apiSecret = self::getApiSecret();
+            if (!empty($apiKey) && !empty($apiSecret)) {
+                $timestamp = (string) time();
+                $nonce = Str::random(16);
+                $signature = hash_hmac('sha256', $apiKey . $timestamp . $nonce . '', $apiSecret);
+
+                $apiUrls = [
+                    $baseUrl . '/api/v1/invoices/' . urlencode($invoiceId),
+                    $baseUrl . '/v1/invoices/' . urlencode($invoiceId),
+                ];
+
+                foreach ($apiUrls as $url) {
+                    try {
+                        $res = Http::withHeaders([
+                            'Accept'           => 'application/json',
+                            'X-QRQU-KEY'       => $apiKey,
+                            'X-QRQU-TIMESTAMP' => $timestamp,
+                            'X-QRQU-NONCE'     => $nonce,
+                            'X-QRQU-SIGNATURE' => $signature,
+                        ])->timeout(3)->get($url);
+
+                        if ($res->successful()) {
+                            $data = $res->json('data', []);
+                            $status = strtoupper($data['status'] ?? '');
+                            if (!empty($status)) {
+                                return $status;
+                            }
+                        }
+                    } catch (\Throwable) {
+                        // Lanjutkan
+                    }
+                }
+            }
+
+            return null;
+        } catch (\Throwable $e) {
+            Log::warning("QrquService checkInvoiceStatus exception: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Uji koneksi jembatan API QRqu secara realtime (Handshake Test)
      */
     public function testConnection(?string $apiUrl = null, ?string $apiKey = null, ?string $apiSecret = null): array
