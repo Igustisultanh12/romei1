@@ -38,17 +38,17 @@ Artisan::command('romei:api-check', function (CeirkuService $ceirku, DokuService
     // Cek CEIRKU
     try {
         $ceirkuStatus = $ceirku->checkDevice('123456789012345'); // Dummy IMEI untuk test ping
-        $this->info('✅ API CEIRKU: Connected');
+        $this->info('[OK] API CEIRKU: Connected');
     } catch (\Exception $e) {
-        $this->error('❌ API CEIRKU: Disconnected (' . $e->getMessage() . ')');
+        $this->error('[FAIL] API CEIRKU: Disconnected (' . $e->getMessage() . ')');
     }
 
     // Cek DOKU
     try {
         $dokuStatus = $doku->verifyPayment('PING-TEST');
-        $this->info('✅ API DOKU: Connected');
+        $this->info('[OK] API DOKU: Connected');
     } catch (\Exception $e) {
-        $this->error('❌ API DOKU: Disconnected (' . $e->getMessage() . ')');
+        $this->error('[FAIL] API DOKU: Disconnected (' . $e->getMessage() . ')');
     }
 })->purpose('Check connection status for CEIRKU and DOKU APIs');
 

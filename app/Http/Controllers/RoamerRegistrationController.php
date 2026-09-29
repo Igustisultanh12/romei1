@@ -45,7 +45,7 @@ class RoamerRegistrationController extends Controller
             }
 
             $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = 'https://ceirku.net/api/v1/roamer/add';
+            $apiUrl = \App\Services\CeirkuService::getRoamerAddUrl();
 
             // 2. Eksekusi API Pusat sesuai dokumentasi halaman 15
             $response = Http::withHeaders([

@@ -1,7 +1,7 @@
 <script setup>
 import { Head, router } from '@inertiajs/vue3';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
-import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/vue/24/outline';
+import { ArrowDownTrayIcon, ArrowPathIcon, InboxIcon } from '@heroicons/vue/24/outline';
 import Swal from 'sweetalert2'; // Pastikan sweetalert2 sudah ter-import
 
 const props = defineProps({
@@ -108,7 +108,7 @@ const getStatusBadge = (status) => {
                         <tbody class="divide-y divide-slate-200 dark:divide-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300">
                             <tr v-if="props.registrations.length === 0">
                                 <td colspan="7" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500 font-bold">
-                                    <div class="text-lg mb-1">📭</div>
+                                    <InboxIcon class="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
                                     Belum ada data antrean pendaftaran IMEI saat ini.
                                 </td>
                             </tr>
@@ -147,10 +147,10 @@ const getStatusBadge = (status) => {
                                 <td class="px-6 py-4 text-right">
                                     <div class="flex items-center justify-end gap-2">
                                         <select :value="item.status" @change="updateStatus(item, $event.target.value)" class="text-[11px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 font-bold text-slate-700 dark:text-slate-200 shadow-sm focus:ring-0 focus:border-slate-400 transition-all">
-                                            <option value="pending">⏳ Pending</option>
-                                            <option value="proses">🔄 Proses</option>
-                                            <option value="selesai">✅ Selesai</option>
-                                            <option value="ditolak">❌ Ditolak</option>
+                                            <option value="pending">Pending</option>
+                                            <option value="proses">Proses</option>
+                                            <option value="selesai">Selesai</option>
+                                            <option value="ditolak">Ditolak</option>
                                         </select>
 
                                         <a v-if="item.status === 'selesai'" :href="route('imei.download-pdf', item.id)" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[11px] font-bold transition-all shadow-sm">

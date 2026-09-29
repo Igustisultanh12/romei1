@@ -72,7 +72,7 @@ const submitRoamer = async () => {
         html: `
             <div class="flex flex-col items-center justify-center p-2 font-sans">
                 <div class="text-sm font-bold text-slate-800 text-center">
-                    ⏳ Mendaftarkan IMEI Slot 1 ke Server Pusat...
+                    Mendaftarkan IMEI Slot 1 ke Server Pusat...
                 </div>
                 <div class="text-[11px] text-slate-400 text-center mt-2">
                     Mohon tunggu, jangan menutup halaman ini atau merefresh browser.
@@ -97,10 +97,10 @@ const submitRoamer = async () => {
                 html: `
                     <div class="flex flex-col items-center justify-center p-2 font-sans">
                         <div class="text-sm font-bold text-emerald-600 text-center">
-                            ✅ IMEI 1 Sukses Terverifikasi!
+                            IMEI 1 Sukses Terverifikasi!
                         </div>
                         <div class="text-sm font-bold text-slate-800 text-center mt-3">
-                            🔄 Melanjutkan Pendaftaran IMEI Slot 2 ke Server Pusat...
+                            Melanjutkan Pendaftaran IMEI Slot 2 ke Server Pusat...
                         </div>
                         <div class="text-[11px] text-slate-400 text-center mt-1">
                             Sedang menginjeksi manifes jaringan slot sekunder...
@@ -215,27 +215,27 @@ const submitRoamer = async () => {
                     <!-- SEKTOR 5: SYARAT & KETENTUAN INTERNAL BERDASARKAN SYRAT KETENTUAN.PDF  -->
                     <div class="border border-slate-200 rounded-2xl p-5 bg-slate-50/40 space-y-4 text-xs text-slate-600 leading-relaxed">
                         <div class="text-center border-b border-slate-200/60 pb-3">
-                            <h3 class="font-black text-slate-950 text-sm tracking-tight">📜 SYARAT & KETENTUAN PEMESANAN IMEI ROAMER </h3>
-                            <p class="text-[10px] text-slate-400 mt-0.5">Harap baca dan pahami semua aturan sebelum melanjutkan pemesanan .</p>
+                            <h3 class="font-black text-slate-950 text-sm tracking-tight">SYARAT & KETENTUAN PEMESANAN IMEI ROAMER</h3>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Harap baca dan pahami semua aturan sebelum melanjutkan pemesanan.</p>
                         </div>
 
                         <!-- HUB DIAGNOSIS UTILITAS INTERKONEKSI -->
                         <div class="p-3 bg-amber-50/60 border border-amber-100 rounded-xl space-y-2">
-                            <p class="font-bold text-amber-900">⚠️ ROMEI : Wajib Cek Status Mandiri Sebelum Input Paket!  </p>
-                            <p class="text-amber-800 text-[11px]"> jika status Imei Anda sudah terdaftar di <strong>Kemenperin / Bea Cukai (Status Registered)</strong>, sinyal tidak akan naik dan dana *TIDAK DAPAT DI-REFUND*  . Lakukan pengecekan di bawah ini:</p>
+                            <p class="font-bold text-amber-900">ROMEI: Wajib Cek Status Mandiri Sebelum Input Paket!</p>
+                            <p class="text-amber-800 text-[11px]">Jika status IMEI Anda sudah terdaftar di <strong>Kemenperin / Bea Cukai (Status Registered)</strong>, sinyal tidak akan naik dan dana *TIDAK DAPAT DI-REFUND*. Lakukan pengecekan di bawah ini:</p>
                             <div class="flex flex-wrap gap-2.5 pt-1">
                                 <Link :href="route('services.sim-lock')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] transition-all">
-                                    🔍 Cek Status IMEI
+                                    Cek Status IMEI
                                 </Link>
                                 <Link :href="route('services.ceir-history')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] transition-all">
-                                    📜 Tracing History CEIR
+                                    Tracing History CEIR
                                 </Link>
                             </div>
                         </div>
 
                         <!-- ATURAN MANIFESTASI PDF -->
                         <div class="space-y-2 text-[11px]">
-                            <p class="font-bold text-slate-900">📌 ATURAN UTAMA KONTRAK REGULASI:  </p>
+                            <p class="font-bold text-slate-900">ATURAN UTAMA KONTRAK REGULASI:</p>
                             <ul class="list-disc pl-4 space-y-1.5 text-slate-600">
                                 <li><strong>IMEI wajib diketik/input dengan benar</strong>. Tidak ada sistem refund saldo jika terjadi kesalahan ketik/input dari user  .</li>
                                 <li>Jika status IMEI Anda <strong>berstatus roamer / aktif</strong>, Mohon tidak untuk mendaftar, tunggu hingga masa berlaku habis  .</li>

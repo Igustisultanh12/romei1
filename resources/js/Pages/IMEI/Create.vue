@@ -124,7 +124,7 @@ const processWalletPayment = async () => {
         html: `
             <div class="flex flex-col items-center justify-center p-2 font-sans">
                 <div class="text-sm font-bold text-slate-800 text-center">
-                    ⏳ Registering IMEI 1 to the ROMEI Central Server...
+                    Registering IMEI 1 to the ROMEI Central Server...
                 </div>
                 <div class="text-[11px] text-slate-400 text-center mt-2">
                     Please wait, do not close this page or refresh your browser.
@@ -142,10 +142,10 @@ const processWalletPayment = async () => {
                     html: `
                         <div class="flex flex-col items-center justify-center p-2 font-sans">
                             <div class="text-sm font-bold text-emerald-600 text-center">
-                                ✅ IMEI 1 Successfully Verified!
+                                IMEI 1 Successfully Verified!
                             </div>
                             <div class="text-sm font-bold text-slate-800 text-center mt-3">
-                                🔄 Proceeding with IMEI 2 Registration to Central Server...
+                                Proceeding with IMEI 2 Registration to Central Server...
                             </div>
                             <div class="text-[11px] text-slate-400 text-center mt-1">
                                 Injecting network manifests for the secondary slot...
@@ -229,14 +229,14 @@ const processWalletPayment = async () => {
                     </div>
 
                     <div class="p-4 bg-amber-50/60 border border-amber-100 rounded-2xl text-xs text-amber-800 space-y-2">
-                        <p class="font-bold">⚠️ Ragu dengan Status Ponsel Luar Negeri Anda?</p>
-                        <p class="text-amber-700">Untuk menghindari kegagalan aktivasi, Anda dapat melakukan pengecehar berbayar via saldo ROMEI e-wallet pada menu:</p>
+                        <p class="font-bold">Ragu dengan Status Ponsel Luar Negeri Anda?</p>
+                        <p class="text-amber-700">Untuk menghindari kegagalan aktivasi, Anda dapat melakukan pengecekan berbayar via saldo ROMEI e-wallet pada menu:</p>
                         <div class="flex flex-wrap gap-3 pt-1">
                             <Link :href="route('services.sim-lock')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg transition-all">
-                                🔍 Cek Status SIM Lock
+                                Cek Status SIM Lock
                             </Link>
                             <Link :href="route('services.ceir-history')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg transition-all">
-                                📜 Cek History Sinkronisasi CEIR
+                                Cek History Sinkronisasi CEIR
                             </Link>
                         </div>
                     </div>

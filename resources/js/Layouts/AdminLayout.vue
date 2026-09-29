@@ -12,7 +12,10 @@ import {
     SunIcon, 
     MoonIcon,
     UserGroupIcon,
-    ChatBubbleLeftRightIcon // Diimpor secara aman untuk visualisasi ikon menu WhatsApp Config
+    ChatBubbleLeftRightIcon,
+    EnvelopeIcon,
+    BanknotesIcon,
+    ExclamationTriangleIcon
 } from '@heroicons/vue/24/outline';
 
 const isDark = ref(true);
@@ -86,6 +89,10 @@ const logout = () => {
                         <GiftIcon class="w-5 h-5" /> Manajemen Voucher
                     </Link>
                     
+                    <Link :href="route().has('admin.withdrawals.index') ? route('admin.withdrawals.index') : '/admin/withdrawals'" :class="$page.url.startsWith('/admin/withdrawals') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
+                        <BanknotesIcon class="w-5 h-5" /> Penarikan Saldo
+                    </Link>
+                    
                     <Link :href="route().has('admin.tickets.index') ? route('admin.tickets.index') : '#'" :class="route().current('admin.tickets.index') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
                         <TicketIcon class="w-5 h-5" /> Ticket Bantuan
                     </Link>
@@ -96,6 +103,10 @@ const logout = () => {
 
                     <Link :href="route().has('admin.whatsapp.config') ? route('admin.whatsapp.config') : '/admin/whatsapp-config'" :class="$page.url.startsWith('/admin/whatsapp-config') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
                         <ChatBubbleLeftRightIcon class="w-5 h-5" /> Konfigurasi WhatsApp
+                    </Link>
+
+                    <Link :href="route().has('admin.mail.index') ? route('admin.mail.index') : '/admin/mail-gateway'" :class="$page.url.startsWith('/admin/mail-gateway') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
+                        <EnvelopeIcon class="w-5 h-5" /> Mail Gateway SMTP
                     </Link>
                     
                     <Link :href="route('admin.settings')" :class="route().current('admin.settings') ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'" class="flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-lg transition-all">
@@ -132,8 +143,9 @@ const logout = () => {
                 </button>
             </header>
 
-            <header v-if="$page.props.errors && Object.keys($page.props.errors).length > 0" class="bg-red-500 text-white text-xs px-8 py-2 font-semibold">
-                ⚠️ Terdeteksi Kendala Operasional: {{ Object.values($page.props.errors)[0] }}
+            <header v-if="$page.props.errors && Object.keys($page.props.errors).length > 0" class="bg-red-600 text-white text-xs px-8 py-2.5 font-semibold flex items-center gap-2">
+                <ExclamationTriangleIcon class="w-4 h-4 shrink-0" />
+                <span>Kendala Operasional: {{ Object.values($page.props.errors)[0] }}</span>
             </header>
 
             <main class="p-8 flex-1 bg-slate-50 dark:bg-slate-950 transition-colors duration-300">

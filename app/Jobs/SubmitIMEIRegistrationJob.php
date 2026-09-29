@@ -1,4 +1,4 @@
-<?
+<?php
 namespace App\Jobs;
 
 use App\Models\ImeiRegistration;

@@ -31,12 +31,14 @@ class SettingController extends Controller
             'settings' => [
                 // PENGATURAN INTEGRASI GATEWAY CEIRKU (SESUAI DOKUMEN RESMI)
                 'ceirku_mode'            => Setting::get('ceirku_mode', 'sandbox'), // sandbox atau live
+                'ceirku_api_url'         => Setting::get('ceirku_api_url', Setting::get('ceirku_url', 'https://ceirku.net/api/v1')),
                 'ceirku_api_key'         => Setting::get('ceirku_api_key', ''),
                 
                 // TARIF JASA DIAGNOSIS BERBAYAR (POTONG SALDO WALLET KONSUMEN ROMEI)
                 'fee_check_sim_lock'     => (int) Setting::get('fee_check_sim_lock', 5000),
                 'fee_check_ceir_history' => (int) Setting::get('fee_check_ceir_history', 7500),
-                'fee_add_roamer_3m'      => (int) Setting::get('fee_add_roamer_3m', 125000),
+                'fee_add_roamer_1m'      => (int) Setting::get('fee_add_roamer_1m', 135000),
+                'fee_add_roamer_3m'      => (int) Setting::get('fee_add_roamer_3m', 180000),
                 
                 // PENGATURAN PEMBAYARAN DOKU MERCHANT GATWAY
                 'doku_client_id'         => Setting::get('doku_client_id', ''),
@@ -57,11 +59,13 @@ class SettingController extends Controller
         $data = $request->validate([
             // Validasi Kredensial CEIRKU Pusat
             'ceirku_mode'            => 'required|in:sandbox,live',
+            'ceirku_api_url'         => 'required|url',
             'ceirku_api_key'         => 'nullable|string',
             
             // Validasi Skema Tarif Penjurnalan Finansial Wallet Konsumen
             'fee_check_sim_lock'     => 'required|integer|min:0',
             'fee_check_ceir_history' => 'required|integer|min:0',
+            'fee_add_roamer_1m'      => 'required|integer|min:0',
             'fee_add_roamer_3m'      => 'required|integer|min:0',
             
             // Validasi Finansial Payment Gateway DOKU
@@ -119,6 +123,21 @@ class SettingController extends Controller
                 ]
             );
         }
+
+        if (isset($data['ceirku_api_url'])) {
+            Setting::updateOrCreate(
+                ['key' => 'ceirku_url'],
+                ['value' => trim($data['ceirku_api_url']), 'group' => 'ceirku']
+            );
+        }
+
+        \App\Models\AuditLog::create([
+            'user_id'     => auth()->id() ?? 1,
+            'activity'    => 'UPDATE_SETTINGS',
+            'description' => 'Memperbarui konfigurasi sistem, API CEIRKU Gateway, dan tarif layanan',
+            'ip_address'  => $request->ip(),
+            'user_agent'  => $request->userAgent(),
+        ]);
 
         return back()->with('flash', ['message' => 'Konfigurasi Mode API CEIRKU, Skema Tarif Finansial, dan Aset Gambar Beranda berhasil diperbarui!']);
     }

@@ -186,7 +186,7 @@ const submit = () => {
                             :class="{ 'opacity-50 pointer-events-none': form.processing }"
                             :disabled="form.processing"
                         >
-                            {{ form.processing ? 'Mendaftarkan Kredensial...' : 'Daftar Akun Sekarang →' }}
+                            {{ form.processing ? 'Mendaftarkan Kredensial...' : 'Daftar Akun Sekarang' }}
                         </PrimaryButton>
 
                         <div class="text-center pt-1 border-t border-slate-200/60">

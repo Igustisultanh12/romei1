@@ -371,9 +371,9 @@ const submitFeedback = () => {
                 </div>
                 
                 <div class="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider">
-                    <span class="bg-emerald-500/10 text-emerald-500 px-3 py-1 border border-emerald-500/20 rounded-md">✓ AMAN</span>
-                    <span class="bg-blue-500/10 text-blue-500 px-3 py-1 border border-blue-500/20 rounded-md">✓ OTOMATIS</span>
-                    <span class="bg-indigo-500/10 text-indigo-500 px-3 py-1 border border-indigo-500/20 rounded-md">✓ CEPAT</span>
+                    <span class="bg-emerald-500/10 text-emerald-500 px-3 py-1 border border-emerald-500/20 rounded-md">AMAN</span>
+                    <span class="bg-blue-500/10 text-blue-500 px-3 py-1 border border-blue-500/20 rounded-md">OTOMATIS</span>
+                    <span class="bg-indigo-500/10 text-indigo-500 px-3 py-1 border border-indigo-500/20 rounded-md">CEPAT</span>
                 </div>
             </div>
         </section>
@@ -417,7 +417,7 @@ const submitFeedback = () => {
                                         <span class="text-[10px] text-slate-400 font-mono mt-1 inline-block bg-white px-2 py-0.5 rounded">{{ props.approved_feedbacks[currentSlide].service_type }}</span>
                                     </div>
                                 </div>
-                                <span v-if="props.approved_feedbacks[currentSlide].is_verified_customer" class="text-[9px] font-black bg-emerald-500/10 text-emerald-500 px-2 py-0.5 border border-emerald-500/20 rounded-md">✓ Pelanggan Terverifikasi</span>
+                                <span v-if="props.approved_feedbacks[currentSlide].is_verified_customer" class="text-[9px] font-black bg-emerald-500/10 text-emerald-500 px-2 py-0.5 border border-emerald-500/20 rounded-md">Pelanggan Terverifikasi</span>
                             </div>
                             
                             <div class="flex items-center text-amber-500">
@@ -467,12 +467,12 @@ const submitFeedback = () => {
                             </div>
                             <div class="space-y-1">
                                 <label class="font-bold text-slate-400">Rating Penilaian Bintang *</label>
-                                <select v-model="feedbackForm.rating" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 focus:ring-1 focus:ring-blue-600 font-mono font-bold text-amber-500">
-                                    <option :value="5">⭐⭐⭐⭐⭐ (5 / 5)</option>
-                                    <option :value="4">⭐⭐⭐⭐ (4 / 5)</option>
-                                    <option :value="3">⭐⭐⭐ (3 / 5)</option>
-                                    <option :value="2">⭐⭐ (2 / 5)</option>
-                                    <option :value="1">⭐ (1 / 5)</option>
+                                <select v-model="feedbackForm.rating" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 focus:ring-1 focus:ring-blue-600 font-bold text-slate-700">
+                                    <option :value="5">5 Bintang (Sangat Puas)</option>
+                                    <option :value="4">4 Bintang (Puas)</option>
+                                    <option :value="3">3 Bintang (Cukup)</option>
+                                    <option :value="2">2 Bintang (Kurang Puas)</option>
+                                    <option :value="1">1 Bintang (Kecewa)</option>
                                 </select>
                             </div>
                         </div>

@@ -15,9 +15,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // 1. Definisikan Middleware Bawaan Grup Web & Proteksi Status Akun Suspended
         $middleware->web(append: [
+            \App\Http\Middleware\SecurityHeadersMiddleware::class, // Menambahkan security headers pada semua response web
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
             \App\Http\Middleware\BlockSuspendedUsers::class, // Mengunci proteksi cek suspend di level web rute
+        ]);
+
+        $middleware->alias([
+            'admin.2fa' => \App\Http\Middleware\EnsureAdmin2FaVerified::class,
         ]);
 
         // 2. PERBAIKAN FATAL TUNNELING: Daftarkan Cloudflare/Reverse Proxy sebagai Trusted Proxy agar aset dibaca via HTTPS murni

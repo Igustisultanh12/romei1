@@ -19,6 +19,9 @@ use App\Http\Controllers\Admin\SettingController as AdminSettingController;
 use App\Http\Controllers\Admin\FeedbackManagementController as AdminFeedbackController;
 use App\Http\Controllers\Admin\CustomerManagementController; 
 use App\Http\Controllers\Admin\WhatsappConfigController; // Diimpor untuk modul penanganan kontrol WhatsApp Gateway Port 7777
+use App\Http\Controllers\Admin\MailGatewayController;
+use App\Http\Controllers\Admin\AdminTwoFactorController;
+use App\Http\Middleware\EnsureAdmin2FaVerified;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -170,13 +173,13 @@ Route::middleware(['auth'])->group(function () {
 
                     // Penentuan text dinamis murni bypass string ceirku_result database lama
                     if ($ceirkuStatus === 'SUCCESS') {
-                        $tx->custom_status_text = '✅ Jaringan Aktif / Selesai';
+                        $tx->custom_status_text = 'Jaringan Aktif / Selesai';
                     } elseif ($ceirkuStatus === 'FAILED') {
-                        $tx->custom_status_text = '❌ Gagal: Permohonan ditolak oleh admin HQ.';
+                        $tx->custom_status_text = 'Gagal: Permohonan ditolak oleh admin HQ.';
                     } elseif ($ceirkuStatus === 'PROCESSING') {
-                        $tx->custom_status_text = '🔄 Sedang Diproses oleh Admin ROMEI...';
+                        $tx->custom_status_text = 'Sedang Diproses oleh Admin ROMEI...';
                     } else {
-                        $tx->custom_status_text = '⏳ Menunggu proses aktivasi operator pusat.';
+                        $tx->custom_status_text = 'Menunggu proses aktivasi operator pusat.';
                     }
                     return $tx;
                 });
@@ -217,12 +220,22 @@ Route::middleware(['auth'])->group(function () {
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 });
 
+// =========================================================================
+// ROUTE OTENTIKASI DUA FAKTOR (2FA) ADMIN ROMEI HQ
+// =========================================================================
+Route::middleware(['auth'])->prefix('admin/2fa')->name('admin.2fa.')->group(function () {
+    Route::get('/', [AdminTwoFactorController::class, 'show'])->name('index');
+    Route::post('/verify', [AdminTwoFactorController::class, 'verify'])->name('verify')->middleware('throttle:5,1');
+    Route::post('/resend', [AdminTwoFactorController::class, 'resend'])->name('resend')->middleware('throttle:3,1');
+    Route::post('/cancel', [AdminTwoFactorController::class, 'cancel'])->name('cancel');
+});
+
 /*
 |--------------------------------------------------------------------------
-| ADMINISTRATIVE HQ AREA (Dengan Proteksi Kontrol Role Administrator)
+| ADMINISTRATIVE HQ AREA (Dengan Proteksi Kontrol Role Administrator & 2FA)
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', EnsureAdmin2FaVerified::class])->prefix('admin')->name('admin.')->group(function () {
     
     Route::group([
         'middleware' => function ($request, $next) {
@@ -356,6 +369,15 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::prefix('whatsapp-config')->name('whatsapp.')->group(function () {
             Route::get('/', [WhatsappConfigController::class, 'index'])->name('config');
             Route::put('/', [WhatsappConfigController::class, 'update'])->name('update');
+        });
+
+        // =========================================================================
+        // MODUL MAIL GATEWAY SMTP & KEAMANAN 2FA
+        // =========================================================================
+        Route::prefix('mail-gateway')->name('mail.')->group(function () {
+            Route::get('/', [MailGatewayController::class, 'index'])->name('index');
+            Route::post('/update', [MailGatewayController::class, 'update'])->name('update')->middleware('throttle:20,1');
+            Route::post('/test', [MailGatewayController::class, 'testSend'])->name('test')->middleware('throttle:5,1');
         });
         
     }); 

@@ -4,13 +4,15 @@
             <div class="max-w-7xl mx-auto">
                 
                 <div class="mb-6">
-                    <Link :href="route('admin.customers.index')" class="text-sm font-bold text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-cyan-400 flex items-center gap-1 transition-colors">
-                        ⬅️ Kembali ke Daftar Pelanggan
+                    <Link :href="route('admin.customers.index')" class="text-sm font-bold text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 flex items-center gap-1.5 transition-colors">
+                        <ArrowLeftIcon class="w-4 h-4 shrink-0" />
+                        <span>Kembali ke Daftar Pelanggan</span>
                     </Link>
                 </div>
 
-                <div v-if="$page.props.flash.success" class="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-600 dark:text-emerald-400 text-sm font-medium">
-                    ✅ {{ $page.props.flash.success }}
+                <div v-if="$page.props.flash.success" class="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-600 dark:text-emerald-400 text-sm font-medium flex items-center gap-2">
+                    <CheckCircleIcon class="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>{{ $page.props.flash.success }}</span>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -48,7 +50,10 @@
                         </div>
 
                         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm dark:shadow-xl">
-                            <h4 class="text-xs font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-1 uppercase tracking-wider">🔒 Paksa Reset Password</h4>
+                            <h4 class="text-xs font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-1.5 uppercase tracking-wider">
+                                <KeyIcon class="w-4 h-4 text-blue-500 shrink-0" />
+                                <span>Paksa Reset Password</span>
+                            </h4>
                             <form @submit.prevent="handleResetPassword" class="space-y-3">
                                 <div>
                                     <label class="block text-[11px] font-bold text-slate-400 mb-1">Password Baru</label>
@@ -68,7 +73,10 @@
                     <div class="space-y-6 lg:col-span-2">
                         
                         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm dark:shadow-xl">
-                            <h4 class="text-xs font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-1 uppercase tracking-wider">📝 Edit Profil Pelanggan</h4>
+                            <h4 class="text-xs font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-1.5 uppercase tracking-wider">
+                                <PencilSquareIcon class="w-4 h-4 text-blue-500 shrink-0" />
+                                <span>Edit Profil Pelanggan</span>
+                            </h4>
                             <form @submit.prevent="handleUpdateProfile" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div class="md:col-span-2">
                                     <label class="block text-[11px] font-bold text-slate-400 mb-1">Nama Lengkap</label>
@@ -91,7 +99,10 @@
                         </div>
 
                         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm dark:shadow-xl">
-                            <h4 class="text-xs font-bold text-slate-800 dark:text-white mb-4 uppercase tracking-wider">💳 Log Transaksi & Diagnosis Layanan</h4>
+                            <h4 class="text-xs font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-1.5 uppercase tracking-wider">
+                                <CreditCardIcon class="w-4 h-4 text-blue-500 shrink-0" />
+                                <span>Log Transaksi & Diagnosis Layanan</span>
+                            </h4>
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left text-xs text-slate-600 dark:text-slate-300">
                                     <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-200 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200 dark:border-slate-800">
@@ -141,7 +152,14 @@
 
 <script setup>
 import { useForm, Link } from '@inertiajs/vue3';
-import AdminLayout from '@/Layouts/AdminLayout.vue'; // SINKRONISASI LAYOUT SUPAYA SIDEBAR TETAP BERDIRI TEGAK
+import AdminLayout from '@/Layouts/AdminLayout.vue';
+import { 
+    ArrowLeftIcon, 
+    CheckCircleIcon, 
+    KeyIcon, 
+    PencilSquareIcon, 
+    CreditCardIcon 
+} from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     customer: Object,

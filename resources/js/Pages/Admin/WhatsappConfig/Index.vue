@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
-import { CloudIcon, ArrowPathIcon, CogIcon } from '@heroicons/vue/24/outline';
+import { CloudIcon, ArrowPathIcon, CogIcon, CheckCircleIcon } from '@heroicons/vue/24/outline';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
@@ -106,7 +106,7 @@ const saveConfiguration = () => {
                 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 col-span-1 md:col-span-2 flex flex-col items-center justify-center text-center min-h-[300px]">
                     
                     <div v-if="props.config.status === 'ONLINE'" class="space-y-3 p-6">
-                        <div class="text-4xl">✅</div>
+                        <CheckCircleIcon class="w-14 h-14 text-emerald-500 mx-auto" />
                         <h3 class="text-md font-bold text-emerald-500 uppercase tracking-wide">Gateway Terhubung Ter-Otentikasi</h3>
                         <p class="text-xs text-slate-400 max-w-sm mx-auto">Koneksi internal localhost port 3100 aman. Seluruh fungsi kirim notifikasi SMS/WA ROMEI platform siap dieksekusi.</p>
                     </div>
@@ -120,7 +120,7 @@ const saveConfiguration = () => {
                     </div>
 
                     <div v-else class="space-y-3 p-6 text-slate-400">
-                        <div class="text-4xl animate-bounce">⏳</div>
+                        <ArrowPathIcon class="w-12 h-12 text-slate-400 dark:text-slate-500 animate-spin mx-auto" />
                         <h3 class="text-sm font-bold uppercase tracking-wider">Mencari Sesi Jaringan...</h3>
                         <p class="text-xs max-w-xs mx-auto">Laravel sedang mendengarkan respon port lokal host. Pastikan file server Baileys Anda sudah di-running lewat PM2.</p>
                     </div>

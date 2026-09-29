@@ -21,16 +21,9 @@ class ApiMonitorController extends Controller
     public function index(): Response
     {
         // 1. Ambil data konfigurasi awal, hilangkan slash di akhir string secara aman
-        $rawCeirUrl = rtrim(Setting::get('ceirku_url', 'https://ceirku.net'), '/');
+        $ceirBaseUrl = \App\Services\CeirkuService::getBaseUrl();
         $dokuBaseUrl = rtrim(Setting::get('doku_api_base_url', 'https://api.doku.com'), '/');
         $ceirApiKey = trim(Setting::get('ceirku_api_key'));
-
-        // NORMALISASI URL CEIRKU: Memastikan '/api/v1' ada di dalam URL secara tepat dan tidak ganda
-        if (str_contains($rawCeirUrl, '/api/v1')) {
-            $ceirBaseUrl = $rawCeirUrl;
-        } else {
-            $ceirBaseUrl = $rawCeirUrl . '/api/v1'; // Menjamin format https://ceirku.id/api/v1
-        }
 
         // 2. Ambil data Saldo Aktual dari CEIRKU via endpoint /balance
         $ceirBalance = 0;
@@ -42,7 +35,7 @@ class ApiMonitorController extends Controller
                         'X-Api-Key' => $ceirApiKey,
                         'Accept' => 'application/json',
                     ])
-                    ->post($ceirBaseUrl . '/balance'); // Hasil akhir: https://ceirku.id/api/v1/balance
+                    ->post(\App\Services\CeirkuService::getBalanceUrl()); // Hasil akhir: /balance
 
                 if ($balanceResponse->successful()) {
                     // Sesuai Dokumentasi Hal 7-8: Mengambil data.credit
@@ -62,7 +55,7 @@ class ApiMonitorController extends Controller
             [
                 'name' => 'CEIRKU Realtime Check API', 
                 'endpoint' => 'POST /v1/imei/check', 
-                'url' => $ceirBaseUrl . '/order', // Target endpoint utama pembuatan order sandbox
+                'url' => \App\Services\CeirkuService::getOrderUrl(), // Target endpoint utama pembuatan order sandbox
                 'type' => 'ceirku',
                 'payload' => [
                     'service_id' => 20, // Test Status Roamer (Sandbox - Biaya Rp 0)
@@ -72,7 +65,7 @@ class ApiMonitorController extends Controller
             [
                 'name' => 'CEIRKU Database Sync Gateway', 
                 'endpoint' => 'POST /v1/imei/register', 
-                'url' => $ceirBaseUrl . '/order',
+                'url' => \App\Services\CeirkuService::getOrderUrl(),
                 'type' => 'ceirku',
                 'payload' => [
                     'service_id' => 21, // Test Status Unknown (Sandbox - Biaya Rp 0)

@@ -54,7 +54,7 @@ const executeCheck = () => {
                     title: 'Pengecekan Sukses',
                     html: `Status Jaringan IMEI Anda adalah <strong>"${details.status}"</strong>.<br><span class="text-xs text-gray-500">Anda bisa melihat histori transaksi terperinci Anda di sini.</span>`,
                     showCancelButton: true,
-                    confirmButtonText: '📜 Cek Histori Transaksi',
+                    confirmButtonText: 'Cek Histori Transaksi',
                     cancelButtonText: 'Tutup',
                     confirmButtonColor: '#1e293b',
                     cancelButtonColor: '#94a3b8',

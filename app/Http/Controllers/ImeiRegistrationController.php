@@ -66,7 +66,7 @@ class ImeiRegistrationController extends Controller
 
                     // NOTIFIKASI WA: Pelanggan Ditolak (Roamer)
                     if ($customer && $customer->whatsapp_number) {
-                        $pesanTolak = "❌ *Pendaftaran Roamer Ditolak*\n\nHalo {$customer->name},\n\nPermohonan paket Roamer Anda dengan Invoice *{$transaction->invoice_number}* ditolak oleh Admin.\n\n*Alasan:* " . ($request->catatan_tolak ?? '-') . "\n\n💰 Saldo Wallet sebesar *Rp " . number_format($transaction->amount, 0, ',', '.') . "* telah di-refund otomatis kembali ke akun Anda.";
+                        $pesanTolak = "[DITOLAK] *Pendaftaran Roamer Ditolak*\n\nHalo {$customer->name},\n\nPermohonan paket Roamer Anda dengan Invoice *{$transaction->invoice_number}* ditolak oleh Admin.\n\n*Alasan:* " . ($request->catatan_tolak ?? '-') . "\n\nSaldo Wallet sebesar *Rp " . number_format($transaction->amount, 0, ',', '.') . "* telah di-refund otomatis kembali ke akun Anda.";
                         WhatsappService2::sendMessage($customer->whatsapp_number, $pesanTolak);
                     }
 
@@ -89,8 +89,8 @@ class ImeiRegistrationController extends Controller
 
                 // NOTIFIKASI WA: Pelanggan Update Status (Roamer)
                 if ($customer && $customer->whatsapp_number) {
-                    $statusIcon = $request->status === 'selesai' ? '✅' : '🔄';
-                    $pesanUpdate = "{$statusIcon} *Update Status Roamer*\n\nHalo {$customer->name},\n\nStatus permohonan Roamer Anda dengan Invoice *{$transaction->invoice_number}* telah diperbarui menjadi: *[" . strtoupper($request->status) . "]*.\n\n*Keterangan:* " . $metadata['ceirku_result'];
+                    $statusLabel = $request->status === 'selesai' ? '[SELESAI]' : '[PROSES]';
+                    $pesanUpdate = "{$statusLabel} *Update Status Roamer*\n\nHalo {$customer->name},\n\nStatus permohonan Roamer Anda dengan Invoice *{$transaction->invoice_number}* telah diperbarui menjadi: *[" . strtoupper($request->status) . "]*.\n\n*Keterangan:* " . $metadata['ceirku_result'];
                     WhatsappService2::sendMessage($customer->whatsapp_number, $pesanUpdate);
                 }
 
@@ -144,7 +144,7 @@ class ImeiRegistrationController extends Controller
 
                 // NOTIFIKASI WA: Pelanggan Ditolak & Refund (Reguler)
                 if ($customer && $customer->whatsapp_number) {
-                    $pesanTolakReg = "❌ *Pengajuan IMEI Ditolak & Refund*\n\nHalo {$customer->name},\n\nRegistrasi IMEI dengan No. Registrasi *{$registration->registration_number}* ditolak oleh ROMEI HQ.\n\n*IMEi 1:* {$registration->imei1}\n*Alasan:* " . ($request->catatan_tolak ?? '-') . "\n\n💰 Dana Anda telah dikembalikan penuh ke Wallet digital.";
+                    $pesanTolakReg = "[DITOLAK] *Pengajuan IMEI Ditolak & Refund*\n\nHalo {$customer->name},\n\nRegistrasi IMEI dengan No. Registrasi *{$registration->registration_number}* ditolak oleh ROMEI HQ.\n\n*IMEI 1:* {$registration->imei1}\n*Alasan:* " . ($request->catatan_tolak ?? '-') . "\n\nDana Anda telah dikembalikan penuh ke Wallet digital.";
                     WhatsappService2::sendMessage($customer->whatsapp_number, $pesanTolakReg);
                 }
 
@@ -157,8 +157,8 @@ class ImeiRegistrationController extends Controller
 
             // NOTIFIKASI WA: Pelanggan Update Status Berhasil/Proses (Reguler)
             if ($customer && $customer->whatsapp_number) {
-                $statusIconReg = $request->status === 'selesai' ? '✅' : '🔄';
-                $pesanUpdateReg = "{$statusIconReg} *Perubahan Status Antrean IMEI*\n\nHalo {$customer->name},\n\nPengajuan IMEI Anda dengan nomor *{$registration->registration_number}* telah diperbarui menjadi: *[" . strtoupper($request->status) . "]*.\n\n*IMEI 1:* {$registration->imei1}\nTeria kasih telah memercayai layanan ROMEI platform.";
+                $statusLabelReg = $request->status === 'selesai' ? '[SELESAI]' : '[PROSES]';
+                $pesanUpdateReg = "{$statusLabelReg} *Perubahan Status Antrean IMEI*\n\nHalo {$customer->name},\n\nPengajuan IMEI Anda dengan nomor *{$registration->registration_number}* telah diperbarui menjadi: *[" . strtoupper($request->status) . "]*.\n\n*IMEI 1:* {$registration->imei1}\nTerima kasih telah memercayai layanan ROMEI platform.";
                 WhatsappService2::sendMessage($customer->whatsapp_number, $pesanUpdateReg);
             }
 
@@ -271,14 +271,14 @@ class ImeiRegistrationController extends Controller
 
             // NOTIFIKASI 1: Otomatis ke Pelanggan (Status: Pending)
             if ($user->whatsapp_number) {
-                $pesanPelanggan = "⏳ *Pesanan IMEI Diterima*\n\nHalo *{$user->name}*,\n\nTerima kasih, permohonan sinkronisasi IMEI perangkat Anda telah masuk ke dalam antrean sistem ROMEI HQ.\n\n*No. Registrasi:* " . ($registration->registration_number ?? '-') . "\n*IMEI 1:* {$request->imei1}\n" . ($request->imei2 ? "*IMEI 2:* {$request->imei2}\n" : "") . "*Tipe SIM:* " . strtoupper($request->sim_type) . "\n*Status:* [PENDING]\n\nMohon ditunggu, Admin ROMEI akan segera meninjau dan melakukan aktivasi jaringan Anda.";
+                $pesanPelanggan = "[STATUS] *Pesanan IMEI Diterima*\n\nHalo *{$user->name}*,\n\nTerima kasih, permohonan sinkronisasi IMEI perangkat Anda telah masuk ke dalam antrean sistem ROMEI HQ.\n\n*No. Registrasi:* " . ($registration->registration_number ?? '-') . "\n*IMEI 1:* {$request->imei1}\n" . ($request->imei2 ? "*IMEI 2:* {$request->imei2}\n" : "") . "*Tipe SIM:* " . strtoupper($request->sim_type) . "\n*Status:* [PENDING]\n\nMohon ditunggu, Admin ROMEI akan segera meninjau dan melakukan aktivasi jaringan Anda.";
                 WhatsappService2::sendMessage($user->whatsapp_number, $pesanPelanggan);
             }
 
             // NOTIFIKASI 2: Otomatis Tembak ke Admin WhatsApp HQ
             $adminPhone = Setting::get('admin_whatsapp_notification', '62816500104');
             if ($adminPhone) {
-                $pesanAdmin = "🔔 *Pemberitahuan Antrean IMEI Baru ROMEI_HQ*\n\nAda permohonan registrasi IMEI baru masuk yang perlu segera dikonfirmasi:\n\n*Nama Pelanggan:* {$user->name}\n*No. Registrasi:* " . ($registration->registration_number ?? '-') . "\n*IMEI 1:* {$request->imei1}\n*Tipe SIM:* " . strtoupper($request->sim_type) . "\n\nSilakan buka Dashboard Admin ROMEI untuk memproses permohonan ini.";
+                $pesanAdmin = "[NOTIFIKASI] *Pemberitahuan Antrean IMEI Baru ROMEI_HQ*\n\nAda permohonan registrasi IMEI baru masuk yang perlu segera dikonfirmasi:\n\n*Nama Pelanggan:* {$user->name}\n*No. Registrasi:* " . ($registration->registration_number ?? '-') . "\n*IMEI 1:* {$request->imei1}\n*Tipe SIM:* " . strtoupper($request->sim_type) . "\n\nSilakan buka Dashboard Admin ROMEI untuk memproses permohonan ini.";
                 WhatsappService2::sendMessage($adminPhone, $pesanAdmin);
             }
 
@@ -354,7 +354,7 @@ class ImeiRegistrationController extends Controller
 
             $mode   = Setting::get('ceirku_mode', 'sandbox'); 
             $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = 'https://ceirku.net/api/v1/order'; 
+            $apiUrl = \App\Services\CeirkuService::getOrderUrl(); 
 
             $serviceId = ($mode === 'live') ? 30 : 20; 
 
@@ -394,7 +394,7 @@ class ImeiRegistrationController extends Controller
                 if ($request->filled('imei2')) {
                     if ($wallet->fresh()->balance < $fee) {
                         if ($user->whatsapp_number) {
-                            $pesanWaSim1 = "📱 *Hasil Cek SIM Lock Perangkat*\n\nHalo {$user->name},\nBerikut hasil tracing instan jaringan Anda:\n\n*IMEI 1:* {$request->imei}\n*Status SIM 1:* {$statusKey}\n\n_Catatan: Pengecekan IMEI 2 terhenti karena saldo kurang._";
+                            $pesanWaSim1 = "[LAPORAN] *Hasil Cek SIM Lock Perangkat*\n\nHalo {$user->name},\nBerikut hasil tracing instan jaringan Anda:\n\n*IMEI 1:* {$request->imei}\n*Status SIM 1:* {$statusKey}\n\n_Catatan: Pengecekan IMEI 2 terhenti karena saldo kurang._";
                             WhatsappService2::sendMessage($user->whatsapp_number, $pesanWaSim1);
                         }
 
@@ -448,7 +448,7 @@ class ImeiRegistrationController extends Controller
                     $status1Clean = str_pad(substr($statusKey, 0, 12), 12, " ");
                     $status2Clean = str_pad(substr($statusKey2, 0, 12), 12, " ");
 
-                    $tableSimLock = "📱 *LAPORAN PENGECEKAN SIM LOCK ROMEI*\n\n" .
+                    $tableSimLock = "[LAPORAN] *PENGECEKAN SIM LOCK ROMEI*\n\n" .
                                     "Halo {$user->name}, berikut rincian status deteksi jaringan gawai Anda:\n\n" .
                                     "```" .
                                     "┌─────────────────┬──────────────┐\n" .
@@ -460,7 +460,7 @@ class ImeiRegistrationController extends Controller
                     }
                     $tableSimLock .= "└─────────────────┴──────────────┘" .
                                     "```\n" .
-                                    "⏰ *Waktu Analisis:* " . now()->format('d/m/Y H:i') . " WIB\n" .
+                                    "*Waktu Analisis:* " . now()->format('d/m/Y H:i') . " WIB\n" .
                                     "_Data sinkronisasi realtime via Central Gate ROMEI HQ._";
 
                     WhatsappService2::sendMessage($user->whatsapp_number, $tableSimLock);
@@ -505,7 +505,7 @@ class ImeiRegistrationController extends Controller
 
             $mode   = Setting::get('ceirku_mode', 'sandbox'); 
             $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = 'https://ceirku.net/api/v1/order'; 
+            $apiUrl = \App\Services\CeirkuService::getOrderUrl(); 
 
             $serviceId = ($mode === 'live') ? 31 : 23; 
 
@@ -548,7 +548,7 @@ class ImeiRegistrationController extends Controller
                 // FORMAT TABEL VERTIKAL MONOSPACE: HASIL HISTORI CEIR KEMENPERIN
                 // -----------------------------------------------------------------
                 if ($user->whatsapp_number) {
-                    $tableHistory = "📋 *TRACING HISTORI DATABASE CEIR PUSAT*\n\n" .
+                    $tableHistory = "[LAPORAN] *TRACING HISTORI DATABASE CEIR PUSAT*\n\n" .
                                     "Berikut rincian riwayat log status sinkronisasi IMEI *{$request->imei}*:\n\n" .
                                     "```" .
                                     "┌────┬──────────────┬──────────────────┐\n" .
@@ -569,7 +569,7 @@ class ImeiRegistrationController extends Controller
 
                     $tableHistory .= "└────┴──────────────┴──────────────────┘" .
                                      "```\n" .
-                                     "⏰ *Waktu Tracing:* " . now()->format('d/m/Y H:i') . " WIB\n" .
+                                     "*Waktu Tracing:* " . now()->format('d/m/Y H:i') . " WIB\n" .
                                      "_Laporan resmi diterbitkan oleh ROMEI Operating System._";
 
                     WhatsappService2::sendMessage($user->whatsapp_number, $tableHistory);
@@ -614,7 +614,7 @@ class ImeiRegistrationController extends Controller
             }
 
             $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = 'https://ceirku.net/api/v1/roamer/add'; 
+            $apiUrl = \App\Services\CeirkuService::getRoamerAddUrl(); 
 
             $response = Http::withHeaders([
                 'X-Api-Key'    => $apiKey, 

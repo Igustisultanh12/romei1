@@ -22,6 +22,9 @@ class User extends Authenticatable
         'whatsapp_number',
         'password',
         'role', // Mengidentifikasi 'admin' atau 'user'
+        'two_factor_enabled',
+        'two_factor_otp',
+        'two_factor_expires_at',
     ];
 
     /**
@@ -32,6 +35,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_otp',
     ];
 
     /**
@@ -42,6 +46,8 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'two_factor_enabled' => 'boolean',
+        'two_factor_expires_at' => 'datetime',
     ];
 
     /**
@@ -95,5 +101,46 @@ class User extends Authenticatable
     public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    /**
+     * Generate 6-digit OTP untuk 2FA
+     */
+    public function generateTwoFactorOtp(int $validMinutes = 10): string
+    {
+        $code = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $this->forceFill([
+            'two_factor_otp' => \Illuminate\Support\Facades\Hash::make($code),
+            'two_factor_expires_at' => now()->addMinutes($validMinutes),
+        ])->save();
+
+        return $code;
+    }
+
+    /**
+     * Verifikasi kode OTP 2FA
+     */
+    public function verifyTwoFactorOtp(string $code): bool
+    {
+        if (empty($this->two_factor_otp) || empty($this->two_factor_expires_at)) {
+            return false;
+        }
+
+        if (now()->isAfter($this->two_factor_expires_at)) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\Hash::check($code, $this->two_factor_otp);
+    }
+
+    /**
+     * Hapus OTP 2FA setelah berhasil diverifikasi
+     */
+    public function clearTwoFactorOtp(): void
+    {
+        $this->forceFill([
+            'two_factor_otp' => null,
+            'two_factor_expires_at' => null,
+        ])->save();
     }
 }

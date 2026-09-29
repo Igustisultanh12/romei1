@@ -53,6 +53,54 @@ class AuthenticatedSessionController extends Controller
 
             // 4. Deteksi Level Hak Akses Pengguna Secara Riil
             if ($user->role === 'admin' || (method_exists($user, 'isAdmin') && $user->isAdmin())) {
+                $is2FaEnabled = \App\Models\Setting::get('admin_2fa_enabled', '1') === '1';
+
+                if ($is2FaEnabled) {
+                    $otp = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+
+                    $request->session()->put([
+                        'admin_2fa_user_id'    => $user->id,
+                        'admin_2fa_remember'   => $request->boolean('remember'),
+                        'admin_2fa_otp_hash'   => \Illuminate\Support\Facades\Hash::make($otp),
+                        'admin_2fa_expires_at' => now()->addMinutes(10)->timestamp,
+                        'admin_2fa_attempts'   => 0,
+                        'admin_2fa_sent_at'    => now()->timestamp,
+                    ]);
+
+                    $user->forceFill([
+                        'two_factor_otp'        => \Illuminate\Support\Facades\Hash::make($otp),
+                        'two_factor_expires_at' => now()->addMinutes(10),
+                    ])->save();
+
+                    // Kirim OTP via Mail Gateway
+                    try {
+                        \Illuminate\Support\Facades\Mail::to($user->email)->send(
+                            new \App\Mail\OtpNotificationMail(
+                                $user->name,
+                                'ADMIN-HQ',
+                                $otp,
+                                'Login Dashboard Admin (2FA)',
+                                '10 Menit'
+                            )
+                        );
+                    } catch (\Throwable $e) {
+                        Log::error("Gagal kirim email OTP 2FA ke {$user->email}: " . $e->getMessage());
+                    }
+
+                    // Kirim via WA jika tersedia
+                    if (!empty($user->whatsapp_number)) {
+                        try {
+                            $msg = "[SECURITY ROMEI HQ]\n\nKode Verifikasi 2FA Anda: *{$otp}*\n\nBerlaku selama 10 menit. Jangan berikan kode ini kepada siapa pun.";
+                            \App\Services\WhatsappService2::sendMessage($user->whatsapp_number, $msg);
+                        } catch (\Throwable $e) {}
+                    }
+
+                    Log::channel('single')->info('ROMEI AUTH: Admin membutuhkan 2FA. Mengalihkan ke /admin/2fa');
+                    Log::channel('single')->info('==================================================');
+
+                    return redirect()->route('admin.2fa.index');
+                }
+
                 Log::channel('single')->info('ROMEI AUTH: Pengguna adalah Admin. Mengalihkan ke /admin/dashboard');
                 Log::channel('single')->info('==================================================');
                 return redirect()->intended(url('/admin/dashboard'));
