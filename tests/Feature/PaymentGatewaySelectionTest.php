@@ -321,4 +321,152 @@ class PaymentGatewaySelectionTest extends TestCase
             'is_auth_ok' => true,
         ]);
     }
+
+    public function test_normalize_base_url_removes_redundant_paths_and_trailing_slashes(): void
+    {
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id'));
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id/'));
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id/api'));
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id/api/'));
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id/api/v1'));
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id/api/v1/'));
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id/api/v1/invoices'));
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id/api/v1/account'));
+        $this->assertEquals('https://qrqu.id', QrquService::normalizeBaseUrl('https://qrqu.id/v1'));
+        $this->assertEquals('http://localhost:8000', QrquService::normalizeBaseUrl('localhost:8000'));
+        $this->assertEquals('https://sub.domain.com/prefix', QrquService::normalizeBaseUrl('https://sub.domain.com/prefix/api/v1'));
+    }
+
+    public function test_admin_settings_update_normalizes_qrqu_api_url_in_database(): void
+    {
+        $response = $this->actingAs($this->admin)->post(route('admin.settings.update'), [
+            'ceirku_mode'              => 'sandbox',
+            'ceirku_api_url'           => 'https://ceirku.net/api/v1',
+            'ceirku_api_key'           => 'sample_key',
+            'fee_check_sim_lock'       => 5000,
+            'fee_check_ceir_history'   => 7500,
+            'fee_add_roamer_1m'        => 135000,
+            'fee_add_roamer_3m'        => 180000,
+            'payment_gateway_provider' => 'qrqu',
+            'qrqu_api_url'             => 'https://qrqu.id/api/v1/',
+            'qrqu_api_key'             => 'qrqu_live_sample',
+            'qrqu_api_secret'          => 'sec_sample',
+            'maintenance_mode'         => false,
+        ]);
+
+        $response->assertRedirect();
+        $this->assertEquals('https://qrqu.id', Setting::get('qrqu_api_url'));
+    }
+
+    public function test_admin_handshake_auto_normalizes_url_and_succeeds(): void
+    {
+        Http::fake([
+            'https://qrqu.id/api/health'     => Http::response(['status' => 'UP'], 200),
+            'https://qrqu.id/api/v1/account' => Http::response([
+                'success' => true,
+                'data'    => [
+                    'name'         => 'PT Auto Normalizer',
+                    'subscription' => ['plan' => 'Enterprise'],
+                ]
+            ], 200),
+        ]);
+
+        // Input URL dengan akhiran /api/v1/
+        $response = $this->actingAs($this->admin)->post(route('admin.settings.test-qrqu'), [
+            'qrqu_api_url'    => 'https://qrqu.id/api/v1/',
+            'qrqu_api_key'    => 'qrqu_live_123',
+            'qrqu_api_secret' => 'sec_456',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success'    => true,
+            'is_auth_ok' => true,
+        ]);
+        $this->assertStringContainsString('PT Auto Normalizer', $response->json('message'));
+    }
+
+    public function test_admin_handshake_falls_back_to_v1_account_when_api_v1_returns_404(): void
+    {
+        Http::fake([
+            'https://qrqu.id/api/health'     => Http::response(['status' => 'UP'], 200),
+            'https://qrqu.id/api/v1/account' => Http::response(['message' => 'Not Found'], 404),
+            'https://qrqu.id/v1/account'     => Http::response([
+                'success' => true,
+                'data'    => [
+                    'name'         => 'Fallback Merchant',
+                    'subscription' => ['plan' => 'Pro'],
+                ]
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($this->admin)->post(route('admin.settings.test-qrqu'), [
+            'qrqu_api_url'    => 'https://qrqu.id',
+            'qrqu_api_key'    => 'qrqu_live_123',
+            'qrqu_api_secret' => 'sec_456',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success'    => true,
+            'is_auth_ok' => true,
+        ]);
+        $this->assertStringContainsString('Fallback Merchant', $response->json('message'));
+    }
+
+    public function test_admin_handshake_returns_clear_diagnostic_when_404_received(): void
+    {
+        Http::fake([
+            'https://qrqu.id/api/health'     => Http::response(['message' => 'Not Found'], 404),
+            'https://qrqu.id/health'         => Http::response(['message' => 'Not Found'], 404),
+            'https://qrqu.id/up'             => Http::response(['message' => 'Not Found'], 404),
+            'https://qrqu.id'                => Http::response(['message' => 'Not Found'], 404),
+            'https://qrqu.id/api/v1/account' => Http::response(['message' => 'Not Found'], 404),
+            'https://qrqu.id/v1/account'     => Http::response(['message' => 'Not Found'], 404),
+            'https://qrqu.id/account'        => Http::response(['message' => 'Not Found'], 404),
+        ]);
+
+        $response = $this->actingAs($this->admin)->post(route('admin.settings.test-qrqu'), [
+            'qrqu_api_url'    => 'https://qrqu.id',
+            'qrqu_api_key'    => 'qrqu_live_123',
+            'qrqu_api_secret' => 'sec_456',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'success'     => false,
+            'status_code' => 404,
+            'is_auth_ok'  => false,
+        ]);
+        $this->assertStringContainsString('HTTP 404', $response->json('message'));
+        $this->assertStringContainsString('tidak ditemukan', $response->json('message'));
+    }
+
+    public function test_admin_handshake_returns_specific_diagnostic_when_401_invalid_key_received(): void
+    {
+        Http::fake([
+            'https://qrqu.id/api/health'     => Http::response(['status' => 'UP'], 200),
+            'https://qrqu.id/api/v1/account' => Http::response([
+                'success' => false,
+                'error'   => [
+                    'code'    => 'INVALID_API_KEY',
+                    'message' => 'The provided API Key is invalid or inactive',
+                ]
+            ], 401),
+        ]);
+
+        $response = $this->actingAs($this->admin)->post(route('admin.settings.test-qrqu'), [
+            'qrqu_api_url'    => 'https://qrqu.id',
+            'qrqu_api_key'    => 'qrqu_live_wrong',
+            'qrqu_api_secret' => 'sec_wrong',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'success'     => false,
+            'status_code' => 401,
+            'is_auth_ok'  => false,
+        ]);
+        $this->assertStringContainsString('API Key tidak terdaftar', $response->json('message'));
+    }
 }

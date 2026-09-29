@@ -187,6 +187,11 @@ const testQrquConnection = async () => {
         return;
     }
 
+    // Auto-normalisasi Base URL di frontend jika user menempelkan /api atau /api/v1 atau trailing slash
+    let cleanUrl = form.qrqu_api_url.trim().replace(/\/+$/, '');
+    cleanUrl = cleanUrl.replace(/\/(api\/v1|api|v1)(\/invoices|\/account)?\/?$/i, '');
+    form.qrqu_api_url = cleanUrl;
+
     testingQrqu.value = true;
     qrquTestResult.value = null;
 
@@ -213,16 +218,17 @@ const testQrquConnection = async () => {
         });
     } catch (err) {
         const errorMsg = err.response?.data?.message || 'Gagal menghubungi endpoint QRqu.';
+        const statusCode = err.response?.data?.status_code || 500;
         qrquTestResult.value = {
             success: false,
             latency: err.response?.data?.latency || '--',
             message: errorMsg,
-            statusCode: err.response?.data?.status_code || 500,
+            statusCode: statusCode,
             isAuthOk: false,
         };
 
         Swal.fire({
-            title: 'Koneksi Gagal / Periksa Kredensial',
+            title: statusCode === 404 ? 'Endpoint Tidak Ditemukan' : 'Koneksi Gagal / Periksa Kredensial',
             text: errorMsg,
             icon: 'warning',
             confirmButtonColor: '#ef4444'
@@ -619,6 +625,9 @@ const saveSettings = () => {
                                 placeholder="http://localhost:8000 atau https://qrqu.id" 
                                 class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
                             />
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                Masukkan root URL portal QRqu tanpa akhiran sub-path (misal: <code class="font-mono text-indigo-600 dark:text-indigo-400">https://qrqu.id</code> atau <code class="font-mono text-indigo-600 dark:text-indigo-400">http://localhost:8000</code>).
+                            </p>
 
                             <!-- HASIL PENGUJIAN QRQU -->
                             <div v-if="qrquTestResult" class="mt-2.5 p-3 rounded-lg border text-xs flex items-start gap-2"
@@ -626,10 +635,15 @@ const saveSettings = () => {
                             >
                                 <CheckCircleIcon v-if="qrquTestResult.success" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                                 <ExclamationTriangleIcon v-else class="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                                <div>
-                                    <div class="font-bold">
-                                        {{ qrquTestResult.success ? 'Koneksi Gateway QRqu Berhasil' : 'Koneksi Gateway QRqu Gagal' }}
-                                        <span class="font-mono text-[10px] ml-1 opacity-80">({{ qrquTestResult.latency }})</span>
+                                <div class="flex-1">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="font-bold">
+                                            {{ qrquTestResult.success ? 'Koneksi Gateway QRqu Berhasil' : 'Koneksi Gateway QRqu Gagal' }}
+                                            <span class="font-mono text-[10px] ml-1 opacity-80">({{ qrquTestResult.latency }})</span>
+                                        </span>
+                                        <span v-if="qrquTestResult.statusCode" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 uppercase">
+                                            HTTP {{ qrquTestResult.statusCode }}
+                                        </span>
                                     </div>
                                     <p class="text-[11px] mt-0.5">{{ qrquTestResult.message }}</p>
                                 </div>

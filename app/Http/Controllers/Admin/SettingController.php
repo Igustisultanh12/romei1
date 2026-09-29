@@ -87,7 +87,7 @@ class SettingController extends Controller
             'payment_gateway_provider' => 'required|in:doku,qrqu',
             'doku_client_id'         => 'nullable|string',
             'doku_secret_key'        => 'nullable|string',
-            'qrqu_api_url'           => 'nullable|url',
+            'qrqu_api_url'           => 'nullable|string',
             'qrqu_api_key'           => 'nullable|string',
             'qrqu_api_secret'        => 'nullable|string',
             'qrqu_webhook_secret'    => 'nullable|string',
@@ -136,11 +136,16 @@ class SettingController extends Controller
                 $groupName = 'general';
             }
 
+            $saveValue = is_bool($value) ? ($value ? 'true' : 'false') : trim((string) $value);
+            if ($key === 'qrqu_api_url' && !empty($saveValue)) {
+                $saveValue = \App\Services\Payment\QrquService::normalizeBaseUrl($saveValue);
+            }
+
             Setting::updateOrCreate(
                 ['key' => $key],
                 [
                     // Memotong spasi tak sengaja di ujung teks saat proses copy-paste token API
-                    'value' => is_bool($value) ? ($value ? 'true' : 'false') : trim($value),
+                    'value' => $saveValue,
                     'group' => $groupName
                 ]
             );
@@ -230,14 +235,16 @@ class SettingController extends Controller
     public function testQrqu(Request $request)
     {
         $request->validate([
-            'qrqu_api_url'    => 'required|url',
+            'qrqu_api_url'    => 'required|string',
             'qrqu_api_key'    => 'nullable|string',
             'qrqu_api_secret' => 'nullable|string',
         ]);
 
+        $cleanUrl = \App\Services\Payment\QrquService::normalizeBaseUrl($request->qrqu_api_url);
+
         $service = new \App\Services\Payment\QrquService();
         $result = $service->testConnection(
-            $request->qrqu_api_url,
+            $cleanUrl,
             $request->qrqu_api_key,
             $request->qrqu_api_secret
         );

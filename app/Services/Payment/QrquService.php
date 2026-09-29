@@ -10,12 +10,49 @@ use Illuminate\Support\Str;
 class QrquService
 {
     /**
-     * Dapatkan Base URL API Gateway QRqu
+     * Normalisasi Base URL API Gateway QRqu
+     * Menghapus trailing slash dan sub-path bawaan seperti /api, /v1, /api/v1, /invoices, dll.
+     */
+    public static function normalizeBaseUrl(?string $url): string
+    {
+        $url = trim((string) $url);
+        if (empty($url)) {
+            return '';
+        }
+
+        // Tambahkan skema HTTP/HTTPS bila pengguna lupa mencantumkannya
+        if (!preg_match('#^https?://#i', $url)) {
+            $isLocal = str_contains($url, 'localhost') || str_contains($url, '127.0.0.1');
+            $url = ($isLocal ? 'http://' : 'https://') . $url;
+        }
+
+        $url = rtrim($url, '/');
+
+        // Bersihkan path endpoint umum jika pengguna menempelkan full API URL
+        $redundantPaths = [
+            '#/api/v1/invoices/?$#i',
+            '#/api/v1/account/?$#i',
+            '#/api/v1/?$#i',
+            '#/v1/invoices/?$#i',
+            '#/v1/account/?$#i',
+            '#/v1/?$#i',
+            '#/api/?$#i',
+        ];
+
+        foreach ($redundantPaths as $pattern) {
+            $url = preg_replace($pattern, '', $url);
+        }
+
+        return rtrim($url, '/');
+    }
+
+    /**
+     * Dapatkan Base URL API Gateway QRqu yang sudah dinormalisasi
      */
     public static function getBaseUrl(): string
     {
         $rawUrl = Setting::get('qrqu_api_url', 'http://localhost:8000');
-        return rtrim(trim($rawUrl), '/');
+        return self::normalizeBaseUrl($rawUrl);
     }
 
     /**
@@ -87,22 +124,33 @@ class QrquService
             $nonce = Str::random(16);
             $signature = hash_hmac('sha256', $apiKey . $timestamp . $nonce . $rawBody, $apiSecret);
 
-            $endpoint = $baseUrl . '/api/v1/invoices';
+            // Daftar kandidat rute endpoint invoice (mendukung prefix /api/v1 maupun /v1)
+            $candidateEndpoints = [
+                $baseUrl . '/api/v1/invoices',
+                $baseUrl . '/v1/invoices',
+            ];
 
-            $response = Http::withHeaders([
-                'Content-Type'      => 'application/json',
-                'Accept'            => 'application/json',
-                'X-QRQU-KEY'        => $apiKey,
-                'X-QRQU-TIMESTAMP'  => $timestamp,
-                'X-QRQU-NONCE'      => $nonce,
-                'X-QRQU-SIGNATURE'  => $signature,
-                'Idempotency-Key'   => $externalId,
-            ])
-                ->timeout(15)
-                ->withBody($rawBody, 'application/json')
-                ->post($endpoint);
+            $response = null;
+            foreach ($candidateEndpoints as $endpoint) {
+                $response = Http::withHeaders([
+                    'Content-Type'      => 'application/json',
+                    'Accept'            => 'application/json',
+                    'X-QRQU-KEY'        => $apiKey,
+                    'X-QRQU-TIMESTAMP'  => $timestamp,
+                    'X-QRQU-NONCE'      => $nonce,
+                    'X-QRQU-SIGNATURE'  => $signature,
+                    'Idempotency-Key'   => $externalId,
+                ])
+                    ->timeout(15)
+                    ->withBody($rawBody, 'application/json')
+                    ->post($endpoint);
 
-            if ($response->successful()) {
+                if ($response->status() !== 404) {
+                    break;
+                }
+            }
+
+            if ($response && $response->successful()) {
                 $json = $response->json();
                 $data = $json['data'] ?? [];
 
@@ -126,11 +174,19 @@ class QrquService
                 ];
             }
 
-            $errorMsg = $response->json('error.message') ?? $response->json('message') ?? 'Ditolak oleh gateway server QRqu (HTTP ' . $response->status() . ')';
+            $statusCode = $response ? $response->status() : 500;
+            $errorMsg = $response?->json('error.message') ?? $response?->json('message');
+
+            if ($statusCode === 404) {
+                $errorMsg = "Endpoint pembuatan invoice QRqu tidak ditemukan (HTTP 404). Periksa konfigurasi Base URL.";
+            } elseif (!$errorMsg) {
+                $errorMsg = "Ditolak oleh gateway server QRqu (HTTP {$statusCode})";
+            }
+
             Log::error('ROMEI QRQU REFUSED - QRqu API menolak payload invoice', [
                 'external_id' => $externalId,
-                'status'      => $response->status(),
-                'response'    => $response->json(),
+                'status'      => $statusCode,
+                'response'    => $response?->json(),
             ]);
 
             return [
@@ -167,16 +223,48 @@ class QrquService
      */
     public function testConnection(?string $apiUrl = null, ?string $apiKey = null, ?string $apiSecret = null): array
     {
-        $rawUrl = rtrim(trim($apiUrl ?: self::getBaseUrl()), '/');
+        $rawUrl = self::normalizeBaseUrl($apiUrl ?: self::getBaseUrl());
         $key = trim((string) ($apiKey ?: self::getApiKey()));
         $secret = trim((string) ($apiSecret ?: self::getApiSecret()));
+
+        if (empty($rawUrl)) {
+            return [
+                'success'     => false,
+                'latency'     => '--',
+                'status_code' => 400,
+                'is_auth_ok'  => false,
+                'message'     => 'URL Gateway QRqu tidak boleh kosong.',
+            ];
+        }
 
         $startTime = microtime(true);
 
         try {
-            // 1. Cek kesehatan endpoint dasar
-            $healthResponse = Http::timeout(5)->get($rawUrl . '/api/health');
-            $latency = round((microtime(true) - $startTime) * 1000) . 'ms';
+            // 1. Periksa ketersediaan server endpoint (probe health)
+            $healthEndpoints = [
+                $rawUrl . '/api/health',
+                $rawUrl . '/health',
+                $rawUrl . '/up',
+                $rawUrl,
+            ];
+
+            $serverReachable = false;
+            $healthStatus = null;
+            $latency = '--';
+
+            foreach ($healthEndpoints as $hUrl) {
+                try {
+                    $probeRes = Http::timeout(4)->get($hUrl);
+                    if ($probeRes->successful() || in_array($probeRes->status(), [401, 403, 301, 302])) {
+                        $serverReachable = true;
+                        $healthStatus = $probeRes->status();
+                        $latency = round((microtime(true) - $startTime) * 1000) . 'ms';
+                        break;
+                    }
+                } catch (\Throwable) {
+                    // Lanjutkan uji kandidat endpoint berikutnya
+                }
+            }
 
             // 2. Jika kredensial diberikan, uji otentikasi merchant profil
             if (!empty($key) && !empty($secret)) {
@@ -185,59 +273,136 @@ class QrquService
                 $signature = hash_hmac('sha256', $key . $timestamp . $nonce . '', $secret);
 
                 $authStartTime = microtime(true);
-                $accountResponse = Http::withHeaders([
-                    'Accept'           => 'application/json',
-                    'X-QRQU-KEY'       => $key,
-                    'X-QRQU-TIMESTAMP' => $timestamp,
-                    'X-QRQU-NONCE'     => $nonce,
-                    'X-QRQU-SIGNATURE' => $signature,
-                ])
-                    ->timeout(6)
-                    ->get($rawUrl . '/api/v1/account');
+                $accountEndpoints = [
+                    $rawUrl . '/api/v1/account',
+                    $rawUrl . '/v1/account',
+                    $rawUrl . '/account',
+                ];
+
+                $lastResponse = null;
+                $authOk = false;
+                $activeAccountData = null;
+
+                foreach ($accountEndpoints as $accUrl) {
+                    try {
+                        $res = Http::withHeaders([
+                            'Accept'           => 'application/json',
+                            'X-QRQU-KEY'       => $key,
+                            'X-QRQU-TIMESTAMP' => $timestamp,
+                            'X-QRQU-NONCE'     => $nonce,
+                            'X-QRQU-SIGNATURE' => $signature,
+                        ])
+                            ->timeout(7)
+                            ->get($accUrl);
+
+                        $lastResponse = $res;
+
+                        if ($res->successful()) {
+                            $authOk = true;
+                            $activeAccountData = $res->json('data', []);
+                            break;
+                        }
+
+                        // Jika status bukan 404 (misal 401 Unauthorized, 403 Forbidden, 429 Too Many Requests),
+                        // berarti endpoint DITEMUKAN namun kredensial atau otentikasi bermasalah!
+                        if ($res->status() !== 404) {
+                            break;
+                        }
+                    } catch (\Throwable $e) {
+                        // Coba endpoint kandidat berikutnya
+                    }
+                }
 
                 $authLatency = round((microtime(true) - $authStartTime) * 1000) . 'ms';
 
-                if ($accountResponse->successful()) {
-                    $accountData = $accountResponse->json('data', []);
-                    $merchantName = $accountData['name'] ?? $accountData['company_name'] ?? 'Merchant';
-                    $planName = $accountData['subscription']['plan'] ?? 'Aktif';
+                if ($authOk && $lastResponse) {
+                    $merchantName = $activeAccountData['name'] ?? $activeAccountData['company_name'] ?? 'Merchant';
+                    $planName = $activeAccountData['subscription']['plan'] ?? 'Aktif';
 
                     return [
                         'success'     => true,
                         'latency'     => $authLatency,
-                        'status_code' => $accountResponse->status(),
+                        'status_code' => $lastResponse->status(),
                         'is_auth_ok'  => true,
                         'message'     => "Gateway QRqu aktif & otentikasi valid ({$authLatency})! Akun: {$merchantName} ({$planName}).",
                     ];
                 }
 
-                $authError = $accountResponse->json('error.message') ?? "HTTP {$accountResponse->status()}";
-                return [
-                    'success'     => false,
-                    'latency'     => $authLatency,
-                    'status_code' => $accountResponse->status(),
-                    'is_auth_ok'  => false,
-                    'message'     => "Server QRqu merespon ({$authLatency}), namun otentikasi ditolak: {$authError}.",
-                ];
+                if ($lastResponse) {
+                    $statusCode = $lastResponse->status();
+                    $errorJson = $lastResponse->json();
+                    $errorCode = $errorJson['error']['code'] ?? null;
+                    $errorMsg = $errorJson['error']['message'] ?? $errorJson['message'] ?? null;
+
+                    // Diagnostik spesifik berdasarkan HTTP Status Code
+                    if ($statusCode === 404) {
+                        return [
+                            'success'     => false,
+                            'latency'     => $authLatency,
+                            'status_code' => 404,
+                            'is_auth_ok'  => false,
+                            'message'     => "Server merespon ({$authLatency}), namun endpoint /api/v1/account tidak ditemukan (HTTP 404). Pastikan Base URL tidak memiliki akhiran sub-path dan server QRqu telah memuat route API v1.",
+                        ];
+                    }
+
+                    if ($statusCode === 401) {
+                        $detail = match ($errorCode) {
+                            'INVALID_API_KEY'            => 'API Key tidak terdaftar atau non-aktif di portal QRqu.',
+                            'INVALID_SIGNATURE'          => 'Signature HMAC-SHA256 ditolak. Pastikan API Secret sesuai dengan API Key.',
+                            'TIMESTAMP_EXPIRED'          => 'Timestamp server ROMEI dan QRqu tidak sinkron (selisih > 300 detik).',
+                            'REPLAY_ATTACK_DETECTED'     => 'Nonce sudah digunakan, coba beberapa detik lagi.',
+                            'IP_NOT_WHITELISTED'         => 'Alamat IP server ROMEI belum di-whitelist di portal QRqu.',
+                            'SUBSCRIPTION_EXPIRED'       => 'Akun merchant QRqu belum memiliki paket langganan aktif.',
+                            'ACCOUNT_SUSPENDED'          => 'Akun merchant QRqu dalam status dibekukan / ditangguhkan.',
+                            default                      => $errorMsg ?: 'Kredensial ditolak oleh QRqu.',
+                        };
+
+                        return [
+                            'success'     => false,
+                            'latency'     => $authLatency,
+                            'status_code' => 401,
+                            'is_auth_ok'  => false,
+                            'message'     => "Otentikasi ditolak (HTTP 401): {$detail}",
+                        ];
+                    }
+
+                    if ($statusCode === 403) {
+                        return [
+                            'success'     => false,
+                            'latency'     => $authLatency,
+                            'status_code' => 403,
+                            'is_auth_ok'  => false,
+                            'message'     => "Akses ditolak (HTTP 403): " . ($errorMsg ?: 'Periksa hak akses API Key QRqu Anda.'),
+                        ];
+                    }
+
+                    return [
+                        'success'     => false,
+                        'latency'     => $authLatency,
+                        'status_code' => $statusCode,
+                        'is_auth_ok'  => false,
+                        'message'     => "Server QRqu merespon ({$authLatency}) dengan status HTTP {$statusCode}: " . ($errorMsg ?: 'Respon tidak terduga.'),
+                    ];
+                }
             }
 
-            // Jika hanya cek URL tanpa key
-            if ($healthResponse->successful()) {
+            // Jika hanya cek URL tanpa key atau key belum diisi
+            if ($serverReachable) {
                 return [
                     'success'     => true,
                     'latency'     => $latency,
-                    'status_code' => $healthResponse->status(),
+                    'status_code' => $healthStatus ?: 200,
                     'is_auth_ok'  => false,
-                    'message'     => "Server endpoint QRqu aktif ({$latency})! Silakan isi API Key & Secret untuk verifikasi akun.",
+                    'message'     => "Server endpoint QRqu aktif ({$latency})! Silakan masukkan API Key & Secret untuk verifikasi akun.",
                 ];
             }
 
             return [
                 'success'     => false,
-                'latency'     => $latency,
-                'status_code' => $healthResponse->status(),
+                'latency'     => '--',
+                'status_code' => 503,
                 'is_auth_ok'  => false,
-                'message'     => "Server QRqu merespon HTTP {$healthResponse->status()}.",
+                'message'     => "Tidak dapat menjangkau server QRqu di {$rawUrl}. Pastikan domain/IP dan port aktif.",
             ];
 
         } catch (\Throwable $e) {
