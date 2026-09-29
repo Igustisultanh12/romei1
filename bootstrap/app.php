@@ -31,8 +31,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // 3. SINKRONISASI CORES: Penyatuan Pengecualian Token CSRF untuk Seluruh Webhook Integrasi ROMEI
         $middleware->validateCsrfTokens(except: [
             'api/webhook/doku/qris',            // Callback QRIS DOKU Live Payment Gateway
-            'webhook/roamer-status',          // Webhook Sinkronisasi Log API CEIRKU Pusat
-            'api/v1/webhook/whatsapp-v2',     // Webhook Callback Incoming Message WA Gateway Port 7777
+            'api/webhook/qrqu',                 // Callback QRIS QRqu Payment Gateway
+            'api/v1/webhook/qrqu',              // Callback QRIS QRqu v1
+            'webhook/qrqu',                     // Direct Callback QRqu
+            'webhook/roamer-status',            // Webhook Sinkronisasi Log API CEIRKU Pusat
+            'api/v1/webhook/whatsapp-v2',       // Webhook Callback Incoming Message WA Gateway Port 7777
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

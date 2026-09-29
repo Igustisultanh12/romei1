@@ -695,27 +695,27 @@ class ImeiRegistrationController extends Controller
                 'payable_id'     => $wallet->id,
             ]);
 
-            $dokuService = new \App\Services\Payment\DokuService();
-            
             $mockTx = new \stdClass();
             $mockTx->id = $transaction->id;
             $mockTx->amount = (int) $transaction->amount;
             $mockTx->invoice_number = $invoiceId; 
             $mockTx->user = $user;
 
-            $paymentUrl = $dokuService->generateQris($mockTx);
+            $paymentResult = \App\Services\Payment\PaymentGatewayManager::createPayment($mockTx);
 
-            if ($paymentUrl) {
+            if (!empty($paymentResult['payment_url'])) {
                 Cache::put('payment_status_' . $invoiceId, 'PENDING', 600);
                 return response()->json([
                     'status'             => 'success',
+                    'provider'           => $paymentResult['provider'] ?? 'doku',
                     'invoice_number'     => $invoiceId,
                     'transaction_number' => $invoiceId,
-                    'payment_url'        => $paymentUrl 
+                    'payment_url'        => $paymentResult['payment_url'],
+                    'qr_string'          => $paymentResult['qr_string'] ?? null,
                 ]);
             }
 
-            throw new \Exception('DOKU Live Payment Gateway menolak pembuatan invoice payload.');
+            throw new \Exception('Payment Gateway menolak pembuatan invoice payload.');
 
         } catch (\Exception $e) {
             Log::error('ROMEI WALLET ERROR - Gagal memproses data top-up: ' . $e->getMessage());

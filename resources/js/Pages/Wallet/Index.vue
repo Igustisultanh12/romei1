@@ -72,7 +72,7 @@ const submitDeposit = () => {
             // Jalankan mesin pemantau status pembayaran realtime
             startPaymentPolling(txNumber);
         } else {
-            Swal.fire('Gagal', 'Sistem tidak berhasil merumuskan kode invoice atau link bayar dari DOKU.', 'error');
+            Swal.fire('Gagal', 'Sistem tidak berhasil merumuskan kode invoice atau link bayar dari Payment Gateway.', 'error');
         }
     })
     .catch((error) => {

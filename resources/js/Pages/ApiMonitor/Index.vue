@@ -22,6 +22,10 @@ const props = defineProps({
     ceir_balance: {
         type: Number,
         default: 0
+    },
+    active_gateway: {
+        type: String,
+        default: 'doku'
     }
 });
 
@@ -260,9 +264,21 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm space-y-4">
-                <div>
-                    <h3 class="text-base font-bold text-slate-900 dark:text-white tracking-tight">Uji Coba Gate Transaksi DOKU (Production Page)</h3>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">Tembak langsung request pembuatan invoice live ke server DOKU untuk memastikan keabsahan *Signature* komersial.</p>
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                            Uji Coba Gate Transaksi {{ props.active_gateway === 'qrqu' ? 'QRqu Gateway' : 'DOKU Gateway' }}
+                        </h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Tembak langsung request pembuatan invoice live ke engine {{ props.active_gateway === 'qrqu' ? 'QRqu' : 'DOKU' }} untuk memastikan keabsahan integrasi dan respon QRIS.
+                        </p>
+                    </div>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold self-start sm:self-auto"
+                        :class="props.active_gateway === 'qrqu' ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'"
+                    >
+                        <span class="w-2 h-2 rounded-full animate-pulse" :class="props.active_gateway === 'qrqu' ? 'bg-indigo-500' : 'bg-blue-500'"></span>
+                        Gateway: {{ props.active_gateway === 'qrqu' ? 'QRqu' : 'DOKU' }}
+                    </span>
                 </div>
                 <div class="max-w-md space-y-4">
                     <div class="space-y-1">
@@ -284,7 +300,7 @@ onBeforeUnmount(() => {
                     </div>
                     <button @click="runPaymentSimulation" :disabled="isSimulating" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-lg text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2">
                         <ArrowPathIcon v-if="isSimulating" class="w-4 h-4 animate-spin" />
-                        {{ isSimulating ? 'Membuka Jendela DOKU Live...' : 'Tembak Transaksi Produksi' }}
+                        {{ isSimulating ? ('Membuka Jendela ' + (props.active_gateway === 'qrqu' ? 'QRqu' : 'DOKU') + ' Live...') : ('Tembak Transaksi ' + (props.active_gateway === 'qrqu' ? 'QRqu' : 'DOKU')) }}
                     </button>
                 </div>
             </div>

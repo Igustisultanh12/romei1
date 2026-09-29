@@ -39,11 +39,15 @@ return new class extends Migration {
         // Transactions
         Schema::create('transactions', function (Blueprint $table) {
             $table->id();
+            $table->string('invoice_number')->unique()->nullable();
             $table->foreignId('user_id')->constrained();
             $table->morphs('payable'); // Bisa untuk Registrasi atau Deposit
             $table->decimal('amount', 15, 2);
             $table->string('status')->default('pending'); // pending, paid, failed
             $table->string('payment_gateway_ref')->nullable();
+            $table->text('description')->nullable();
+            $table->json('metadata')->nullable();
+            $table->timestamp('paid_at')->nullable();
             $table->timestamps();
         });
     }

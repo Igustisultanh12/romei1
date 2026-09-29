@@ -45,9 +45,19 @@ class SettingController extends Controller
                 'fee_add_roamer_1m'      => (int) Setting::get('fee_add_roamer_1m', 135000),
                 'fee_add_roamer_3m'      => (int) Setting::get('fee_add_roamer_3m', 180000),
                 
-                // PENGATURAN PEMBAYARAN DOKU MERCHANT GATWAY
+                // PENGATURAN PILIHAN PAYMENT GATEWAY (DOKU VS QRQU)
+                'payment_gateway_provider' => Setting::get('payment_gateway_provider', 'doku'),
+                
+                // PENGATURAN PEMBAYARAN DOKU MERCHANT GATEWAY
                 'doku_client_id'         => Setting::get('doku_client_id', ''),
                 'doku_secret_key'        => Setting::get('doku_secret_key', ''),
+                
+                // PENGATURAN PEMBAYARAN QRQU MERCHANT GATEWAY
+                'qrqu_api_url'           => Setting::get('qrqu_api_url', 'http://localhost:8000'),
+                'qrqu_api_key'           => Setting::get('qrqu_api_key', ''),
+                'qrqu_api_secret'        => Setting::get('qrqu_api_secret', ''),
+                'qrqu_webhook_secret'    => Setting::get('qrqu_webhook_secret', ''),
+                'qrqu_webhook_url'       => url('/api/webhook/qrqu'),
                 
                 // PENGATURAN UMUM APLIKASI
                 'maintenance_mode'       => Setting::get('maintenance_mode', 'false') === 'true',
@@ -73,9 +83,14 @@ class SettingController extends Controller
             'fee_add_roamer_1m'      => 'required|integer|min:0',
             'fee_add_roamer_3m'      => 'required|integer|min:0',
             
-            // Validasi Finansial Payment Gateway DOKU
+            // Validasi Finansial Payment Gateway (DOKU & QRqu)
+            'payment_gateway_provider' => 'required|in:doku,qrqu',
             'doku_client_id'         => 'nullable|string',
             'doku_secret_key'        => 'nullable|string',
+            'qrqu_api_url'           => 'nullable|url',
+            'qrqu_api_key'           => 'nullable|string',
+            'qrqu_api_secret'        => 'nullable|string',
+            'qrqu_webhook_secret'    => 'nullable|string',
             
             // Validasi Umum
             'maintenance_mode'       => 'required|boolean',
@@ -115,6 +130,8 @@ class SettingController extends Controller
                 $groupName = 'ceirku';
             } elseif (str_contains($key, 'doku')) {
                 $groupName = 'doku';
+            } elseif (str_contains($key, 'qrqu') || $key === 'payment_gateway_provider') {
+                $groupName = 'payment';
             } else {
                 $groupName = 'general';
             }
@@ -205,6 +222,27 @@ class SettingController extends Controller
                 'message'     => "Gagal terhubung ke {$rawUrl}: " . $e->getMessage(),
             ], 422);
         }
+    }
+
+    /**
+     * Uji koneksi jembatan API Gateway QRqu secara realtime
+     */
+    public function testQrqu(Request $request)
+    {
+        $request->validate([
+            'qrqu_api_url'    => 'required|url',
+            'qrqu_api_key'    => 'nullable|string',
+            'qrqu_api_secret' => 'nullable|string',
+        ]);
+
+        $service = new \App\Services\Payment\QrquService();
+        $result = $service->testConnection(
+            $request->qrqu_api_url,
+            $request->qrqu_api_key,
+            $request->qrqu_api_secret
+        );
+
+        return response()->json($result, $result['success'] ? 200 : 422);
     }
 
     /**

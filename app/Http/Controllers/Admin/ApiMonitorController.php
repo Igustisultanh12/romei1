@@ -123,21 +123,44 @@ class ApiMonitorController extends Controller
             ];
         }
 
-        $monitoredApis[] = [
-            'name' => 'DOKU IPN Webhook Receiver (Lokal)',
-            'endpoint' => 'POST /api/v1/callback/doku',
-            'latency' => '0ms',
-            'status' => 'online'
-        ];
+        $activeGateway = \App\Services\Payment\PaymentGatewayManager::getActiveProvider();
+        if ($activeGateway === 'qrqu') {
+            $monitoredApis[] = [
+                'name' => 'QRqu Payment Gateway Engine (Aktif)',
+                'endpoint' => 'POST ' . \App\Services\Payment\QrquService::getBaseUrl() . '/api/v1/invoices',
+                'latency' => '0ms',
+                'status' => 'online'
+            ];
+            $monitoredApis[] = [
+                'name' => 'QRqu Webhook Receiver (Lokal)',
+                'endpoint' => 'POST /api/webhook/qrqu',
+                'latency' => '0ms',
+                'status' => 'online'
+            ];
+        } else {
+            $monitoredApis[] = [
+                'name' => 'DOKU Live Payment Gateway (Aktif)',
+                'endpoint' => 'POST https://api.doku.com/checkout/v1/payment',
+                'latency' => '0ms',
+                'status' => 'online'
+            ];
+            $monitoredApis[] = [
+                'name' => 'DOKU IPN Webhook Receiver (Lokal)',
+                'endpoint' => 'POST /api/webhook/doku/qris',
+                'latency' => '0ms',
+                'status' => 'online'
+            ];
+        }
 
         return Inertia::render('ApiMonitor/Index', [
-            'apis' => $monitoredApis,
-            'ceir_balance' => (float) $ceirBalance
+            'apis'           => $monitoredApis,
+            'ceir_balance'   => (float) $ceirBalance,
+            'active_gateway' => $activeGateway,
         ]);
     }
 
     /**
-     * METHOD LIVE CHECKOUT (SINKRON 100% DENGAN MODEL TRANSACTION & DOKU SERVICE)
+     * METHOD LIVE CHECKOUT (SINKRON DENGAN DOKU & QRQU VIA PAYMENT GATEWAY MANAGER)
      */
     public function testPayment(Request $request)
     {
@@ -156,23 +179,25 @@ class ApiMonitorController extends Controller
             $transaction->user_id = auth()->id() ?? 1;
             $transaction->user = auth()->user(); 
 
-            $dokuService = new \App\Services\Payment\DokuService();
-            $paymentUrl = $dokuService->generateQris($transaction);
+            $paymentResult = \App\Services\Payment\PaymentGatewayManager::createPayment($transaction);
 
-            if ($paymentUrl) {
+            if (!empty($paymentResult['payment_url'])) {
                 Cache::put('payment_status_' . $invoiceId, 'PENDING', 600);
 
+                $providerName = ($paymentResult['provider'] ?? 'doku') === 'qrqu' ? 'QRqu' : 'DOKU';
                 return response()->json([
                     'status'      => 'success',
-                    'message'     => 'Koneksi Sukses! Halaman Invoice Pembayaran Berhasil Diterbitkan Resmi Oleh DOKU.',
+                    'provider'    => $paymentResult['provider'] ?? 'doku',
+                    'message'     => "Koneksi Sukses! Halaman Invoice Pembayaran Berhasil Diterbitkan Resmi Oleh {$providerName}.",
                     'invoice_id'  => $invoiceId,
-                    'payment_url' => $paymentUrl
+                    'payment_url' => $paymentResult['payment_url'],
+                    'qr_string'   => $paymentResult['qr_string'] ?? null,
                 ]);
             }
 
             return response()->json([
                 'status'  => 'error',
-                'message' => 'DOKU Live Gateway menolak payload mas. Silakan periksa log server aaPanel.'
+                'message' => 'Payment Gateway menolak pembuatan invoice payload.'
             ], 400);
 
         } catch (\Exception $e) {

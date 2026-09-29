@@ -32,8 +32,15 @@ const form = useForm({
     fee_add_roamer_1m: props.settings.fee_add_roamer_1m ?? 135000,
     fee_add_roamer_3m: props.settings.fee_add_roamer_3m ?? 180000,
 
+    payment_gateway_provider: props.settings.payment_gateway_provider || 'doku',
     doku_client_id: props.settings.doku_client_id || '',
     doku_secret_key: props.settings.doku_secret_key || '',
+
+    qrqu_api_url: props.settings.qrqu_api_url || 'http://localhost:8000',
+    qrqu_api_key: props.settings.qrqu_api_key || '',
+    qrqu_api_secret: props.settings.qrqu_api_secret || '',
+    qrqu_webhook_secret: props.settings.qrqu_webhook_secret || '',
+
     maintenance_mode: props.settings.maintenance_mode || false,
     beranda_image: null, 
 });
@@ -41,6 +48,12 @@ const form = useForm({
 const imagePreview = ref(props.settings.beranda_image_url || null);
 const testingCeirku = ref(false);
 const ceirkuTestResult = ref(null);
+
+const testingQrqu = ref(false);
+const qrquTestResult = ref(null);
+const copiedQrquWebhook = ref(false);
+const qrquWebhookUrl = ref(props.settings.qrqu_webhook_url || (typeof window !== 'undefined' ? (window.location.origin + '/api/webhook/qrqu') : 'https://romei.my.id/api/webhook/qrqu'));
+
 const currentServerIp = ref(props.settings.server_ip || '127.0.0.1');
 const copiedIp = ref(false);
 const isDetectingIp = ref(false);
@@ -143,6 +156,79 @@ const testCeirkuConnection = async () => {
         });
     } finally {
         testingCeirku.value = false;
+    }
+};
+
+const copyQrquWebhook = async () => {
+    try {
+        await navigator.clipboard.writeText(qrquWebhookUrl.value);
+        copiedQrquWebhook.value = true;
+        setTimeout(() => { copiedQrquWebhook.value = false; }, 2500);
+    } catch (e) {
+        const textarea = document.createElement('textarea');
+        textarea.value = qrquWebhookUrl.value;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        copiedQrquWebhook.value = true;
+        setTimeout(() => { copiedQrquWebhook.value = false; }, 2500);
+    }
+};
+
+const testQrquConnection = async () => {
+    if (!form.qrqu_api_url) {
+        Swal.fire({
+            title: 'URL Kosong',
+            text: 'Harap masukkan URL Gateway QRqu terlebih dahulu.',
+            icon: 'warning',
+            confirmButtonColor: '#2563eb'
+        });
+        return;
+    }
+
+    testingQrqu.value = true;
+    qrquTestResult.value = null;
+
+    try {
+        const response = await axios.post(route('admin.settings.test-qrqu'), {
+            qrqu_api_url: form.qrqu_api_url,
+            qrqu_api_key: form.qrqu_api_key,
+            qrqu_api_secret: form.qrqu_api_secret,
+        });
+
+        qrquTestResult.value = {
+            success: true,
+            latency: response.data.latency,
+            message: response.data.message,
+            statusCode: response.data.status_code,
+            isAuthOk: response.data.is_auth_ok,
+        };
+
+        Swal.fire({
+            title: 'Koneksi Berhasil Terhubung',
+            text: response.data.message,
+            icon: 'success',
+            confirmButtonColor: '#2563eb'
+        });
+    } catch (err) {
+        const errorMsg = err.response?.data?.message || 'Gagal menghubungi endpoint QRqu.';
+        qrquTestResult.value = {
+            success: false,
+            latency: err.response?.data?.latency || '--',
+            message: errorMsg,
+            statusCode: err.response?.data?.status_code || 500,
+            isAuthOk: false,
+        };
+
+        Swal.fire({
+            title: 'Koneksi Gagal / Periksa Kredensial',
+            text: errorMsg,
+            icon: 'warning',
+            confirmButtonColor: '#ef4444'
+        });
+    } finally {
+        testingQrqu.value = false;
     }
 };
 
@@ -399,38 +485,221 @@ const saveSettings = () => {
                     </div>
                 </div>
 
-                <!-- SEKSI 3: GERBANG TRANSAKSI DOKU TOP UP -->
-                <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5 transition-colors">
-                    <div class="border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center gap-2">
-                        <CreditCardIcon class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                        <div>
-                            <h3 class="font-bold text-slate-900 dark:text-white text-base">3. Payment Gateway DOKU (Top Up Saldo)</h3>
-                            <p class="text-xs text-slate-500 dark:text-slate-400">Digunakan untuk generasi QRIS dan notifikasi pembayaran otomatis konsumen.</p>
+                <!-- SEKSI 3: GERBANG PEMBAYARAN GATEWAY (DOKU VS QRQU) -->
+                <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 transition-colors">
+                    <div class="border-b border-slate-200 dark:border-slate-800 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <CreditCardIcon class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                            <div>
+                                <h3 class="font-bold text-slate-900 dark:text-white text-base">3. Gerbang Pembayaran Gateway (Top Up & Transaksi)</h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Pilih penyedia gerbang pembayaran aktif antara DOKU atau QRqu untuk transaksi & top up saldo konsumen.</p>
+                            </div>
+                        </div>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider self-start sm:self-auto"
+                            :class="form.payment_gateway_provider === 'qrqu' ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'"
+                        >
+                            <span class="w-2 h-2 rounded-full animate-pulse" :class="form.payment_gateway_provider === 'qrqu' ? 'bg-indigo-500' : 'bg-blue-500'"></span>
+                            Aktif: {{ form.payment_gateway_provider === 'qrqu' ? 'QRqu Gateway' : 'DOKU Gateway' }}
+                        </span>
+                    </div>
+
+                    <!-- PILIHAN KARTU PROVIDER: DOKU ATAU QRQU -->
+                    <div>
+                        <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
+                            Pilih Penyedia Gateway Pembayaran
+                        </label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- KARTU 1: DOKU -->
+                            <div 
+                                @click="form.payment_gateway_provider = 'doku'"
+                                :class="form.payment_gateway_provider === 'doku' ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/20 ring-2 ring-blue-500/20 shadow-sm' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900/40'"
+                                class="p-4 rounded-xl border cursor-pointer transition relative flex flex-col justify-between"
+                            >
+                                <div class="flex items-start justify-between gap-2 mb-2">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs">
+                                            DK
+                                        </div>
+                                        <div>
+                                            <h4 class="text-sm font-bold text-slate-900 dark:text-white">DOKU Payment Gateway</h4>
+                                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Direct Checkout Resmi DOKU</p>
+                                        </div>
+                                    </div>
+                                    <input 
+                                        type="radio" 
+                                        value="doku" 
+                                        v-model="form.payment_gateway_provider" 
+                                        class="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                                    />
+                                </div>
+                                <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                                    Menggunakan protokol direct DOKU Checkout v1 dengan SHA256 Digest & HMAC-SHA256 signature.
+                                </p>
+                            </div>
+
+                            <!-- KARTU 2: QRQU -->
+                            <div 
+                                @click="form.payment_gateway_provider = 'qrqu'"
+                                :class="form.payment_gateway_provider === 'qrqu' ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20 ring-2 ring-indigo-500/20 shadow-sm' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900/40'"
+                                class="p-4 rounded-xl border cursor-pointer transition relative flex flex-col justify-between"
+                            >
+                                <div class="flex items-start justify-between gap-2 mb-2">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
+                                            QQ
+                                        </div>
+                                        <div>
+                                            <h4 class="text-sm font-bold text-slate-900 dark:text-white">QRqu Payment Gateway</h4>
+                                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Platform Middleware QRqu</p>
+                                        </div>
+                                    </div>
+                                    <input 
+                                        type="radio" 
+                                        value="qrqu" 
+                                        v-model="form.payment_gateway_provider" 
+                                        class="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500" 
+                                    />
+                                </div>
+                                <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                                    Mengintegrasikan platform QRqu sebagai payment aggregator dengan dukungan QRIS dinamis & webhook HMAC.
+                                </p>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
-                                DOKU Client ID (Mall ID)
-                            </label>
-                            <input 
-                                type="text" 
-                                v-model="form.doku_client_id" 
-                                placeholder="Contoh: MALL-ID-12345" 
-                                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                            />
+                    <!-- FORM KREDENSIAL DOKU (MUNCUL SAAT DOKU AKTIF) -->
+                    <div v-if="form.payment_gateway_provider === 'doku'" class="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
+                                    DOKU Client ID (Mall ID)
+                                </label>
+                                <input 
+                                    type="text" 
+                                    v-model="form.doku_client_id" 
+                                    placeholder="Contoh: MALL-ID-12345" 
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                />
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
+                                    DOKU Shared Secret Key
+                                </label>
+                                <input 
+                                    type="password" 
+                                    v-model="form.doku_secret_key" 
+                                    placeholder="••••••••••••••••" 
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
-                                DOKU Shared Secret Key
-                            </label>
+                    </div>
+
+                    <!-- FORM KREDENSIAL QRQU (MUNCUL SAAT QRQU AKTIF) -->
+                    <div v-else class="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <!-- URL GATEWAY QRQU & UJI HANDSHAKE -->
+                        <div class="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/60 via-white to-purple-50/30 dark:from-slate-800/80 dark:via-slate-800/50 dark:to-indigo-950/20">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 mb-2">
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                    Endpoint Base URL API QRqu
+                                </label>
+                                <button 
+                                    type="button" 
+                                    @click="testQrquConnection" 
+                                    :disabled="testingQrqu"
+                                    class="self-start sm:self-auto px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                                >
+                                    <ArrowPathIcon class="w-3.5 h-3.5" :class="{ 'animate-spin': testingQrqu }" />
+                                    <span>{{ testingQrqu ? 'Menguji Koneksi...' : 'Uji Jembatan API QRqu' }}</span>
+                                </button>
+                            </div>
                             <input 
-                                type="password" 
-                                v-model="form.doku_secret_key" 
-                                placeholder="••••••••••••••••" 
-                                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                type="url" 
+                                v-model="form.qrqu_api_url" 
+                                placeholder="http://localhost:8000 atau https://qrqu.id" 
+                                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
                             />
+
+                            <!-- HASIL PENGUJIAN QRQU -->
+                            <div v-if="qrquTestResult" class="mt-2.5 p-3 rounded-lg border text-xs flex items-start gap-2"
+                                :class="qrquTestResult.success ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200' : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'"
+                            >
+                                <CheckCircleIcon v-if="qrquTestResult.success" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                <ExclamationTriangleIcon v-else class="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <div class="font-bold">
+                                        {{ qrquTestResult.success ? 'Koneksi Gateway QRqu Berhasil' : 'Koneksi Gateway QRqu Gagal' }}
+                                        <span class="font-mono text-[10px] ml-1 opacity-80">({{ qrquTestResult.latency }})</span>
+                                    </div>
+                                    <p class="text-[11px] mt-0.5">{{ qrquTestResult.message }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KREDENSIAL MERCHANT QRQU -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
+                                    QRqu Merchant API Key (X-QRQU-KEY)
+                                </label>
+                                <input 
+                                    type="text" 
+                                    v-model="form.qrqu_api_key" 
+                                    placeholder="Contoh: qrqu_live_... atau qrqu_sand_..." 
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+                                />
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
+                                    QRqu Merchant API Secret
+                                </label>
+                                <input 
+                                    type="password" 
+                                    v-model="form.qrqu_api_secret" 
+                                    placeholder="••••••••••••••••" 
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
+                                    QRqu Webhook Secret Key
+                                </label>
+                                <input 
+                                    type="password" 
+                                    v-model="form.qrqu_webhook_secret" 
+                                    placeholder="Opsional, jika kosong menggunakan API Secret" 
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+                                />
+                                <p class="text-[11px] text-slate-400 mt-1">Digunakan untuk memvalidasi tanda tangan webhook masuk dari QRqu.</p>
+                            </div>
+
+                            <!-- WEBHOOK CALLBACK URL BOX -->
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
+                                    Webhook URL ROMEI (Daftarkan di Portal QRqu)
+                                </label>
+                                <div class="flex items-center gap-1.5">
+                                    <input 
+                                        type="text" 
+                                        readonly 
+                                        :value="qrquWebhookUrl" 
+                                        class="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 text-xs font-mono select-all outline-none"
+                                    />
+                                    <button 
+                                        type="button" 
+                                        @click="copyQrquWebhook" 
+                                        class="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold shrink-0 transition"
+                                        title="Salin Webhook URL"
+                                    >
+                                        <ClipboardDocumentCheckIcon v-if="copiedQrquWebhook" class="w-4 h-4 text-emerald-600" />
+                                        <ClipboardDocumentIcon v-else class="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-1">Masukkan URL ini pada pengaturan Webhook URL di dashboard merchant QRqu.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
