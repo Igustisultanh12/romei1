@@ -308,16 +308,28 @@ class ApiMonitorController extends Controller
             ]);
         }
 
-        // Active lookup ke QRqu gateway jika gateway aktif adalah QRqu
-        $activeGateway = \App\Models\Setting::get('active_payment_gateway', 'doku');
-        if ($activeGateway === 'qrqu') {
-            try {
-                $qrquId = Cache::get('payment_qrqu_id_' . $invoiceId, $invoiceId);
-                $qrquService = new \App\Services\Payment\QrquService();
-                $qrquStatus = $qrquService->checkInvoiceStatus($qrquId);
+        // 2. Cek juga dari tabel transactions di database jika ada
+        $trx = \App\Models\Transaction::where('invoice_number', $invoiceId)->first();
+        if ($trx && in_array(strtoupper((string) $trx->status), ['SUCCESS', 'PAID'], true)) {
+            Cache::put('payment_status_' . $invoiceId, 'SUCCESS', 600);
+            return response()->json([
+                'status'         => 'success',
+                'payment_status' => 'SUCCESS',
+                'is_paid'        => true,
+            ]);
+        }
 
-                // Coba invoiceId jika qrquId beda
-                if (!$qrquStatus && $qrquId !== $invoiceId) {
+        // 3. Active lookup ke QRqu gateway jika ada qrquId di cache, invoice QRqu, atau gateway aktif QRqu
+        $qrquId = Cache::get('payment_qrqu_id_' . $invoiceId);
+        $activeGateway = \App\Models\Setting::get('active_payment_gateway', 'doku');
+        if (!empty($qrquId) || $activeGateway === 'qrqu' || str_starts_with($invoiceId, 'INV-')) {
+            try {
+                $targetCheckId = !empty($qrquId) ? $qrquId : $invoiceId;
+                $qrquService = new \App\Services\Payment\QrquService();
+                $qrquStatus = $qrquService->checkInvoiceStatus($targetCheckId);
+
+                // Coba invoiceId jika targetCheckId beda
+                if (!$qrquStatus && $targetCheckId !== $invoiceId) {
                     $qrquStatus = $qrquService->checkInvoiceStatus($invoiceId);
                 }
 

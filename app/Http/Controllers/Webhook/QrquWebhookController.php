@@ -99,14 +99,6 @@ class QrquWebhookController extends Controller
                 ->first();
         }
 
-        // Fallback pencocokan prefix jika terdapat postfix token
-        if (!$transaction && $externalId) {
-            $parts = explode('-', $externalId);
-            if (count($parts) > 1) {
-                $transaction = Transaction::where('invoice_number', 'like', $parts[0] . '-' . $parts[1] . '%')->first();
-            }
-        }
-
         if (!$transaction) {
             // Cek apakah ini transaksi pengujian / monitoring (misal dari ApiMonitorController::testPayment)
             $isPaidStatus = ($event === 'payment.paid' || in_array($status, ['PAID', 'SUCCESS'], true));
