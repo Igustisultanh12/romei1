@@ -192,15 +192,25 @@ onBeforeUnmount(() => {
             <div v-if="showDokuModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity" @click="closeDokuModalManual"></div>
 
-                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg h-[80vh] flex flex-col shadow-2xl transform transition-all relative z-10 overflow-hidden">
-                    <div class="px-4 py-3 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span class="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider font-mono">Invoice: {{ currentInvoiceId }}</span>
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg h-[88vh] sm:h-[80vh] flex flex-col shadow-2xl transform transition-all relative z-10 overflow-hidden">
+                    <div class="px-3.5 sm:px-4 py-3 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 truncate">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                            <span class="text-[11px] sm:text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider font-mono truncate">{{ currentInvoiceId }}</span>
                         </div>
-                        <button @click="closeDokuModalManual" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
-                            <XMarkIcon class="w-5 h-5" />
-                        </button>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <a
+                                :href="activePaymentUrl"
+                                target="_blank"
+                                class="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] sm:text-[11px] font-bold bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 rounded-lg border border-blue-200 dark:border-blue-500/30 transition shadow-sm"
+                                title="Buka di tab penuh (disarankan untuk pembayaran via e-wallet di HP)"
+                            >
+                                <span>Tab Penuh ↗</span>
+                            </a>
+                            <button @click="closeDokuModalManual" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                                <XMarkIcon class="w-5 h-5" />
+                            </button>
+                        </div>
                     </div>
                     <div class="flex-1 bg-white">
                         <iframe :src="activePaymentUrl" class="w-full h-full border-0" allow="geolocation; microphone; camera font-mono"></iframe>
