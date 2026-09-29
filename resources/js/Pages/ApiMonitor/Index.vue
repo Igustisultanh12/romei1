@@ -307,9 +307,17 @@ onBeforeUnmount(() => {
                     </span>
                 </div>
                 <div class="max-w-md space-y-4">
-                    <div class="space-y-1">
-                        <label class="text-xs font-bold text-slate-400">Nominal Transaksi Asli (IDR)</label>
-                        <input v-model="txAmount" type="number" min="10000" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold px-3 py-2 text-slate-900 dark:text-white focus:ring-1 focus:ring-blue-500" />
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs font-bold text-slate-400">Nominal Transaksi Asli (IDR)</label>
+                            <span class="text-[11px] text-slate-400 font-mono">Min: Rp 1</span>
+                        </div>
+                        <input v-model="txAmount" type="number" min="1" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold px-3 py-2 text-slate-900 dark:text-white focus:ring-1 focus:ring-blue-500 font-mono" />
+                        <div class="flex flex-wrap gap-1.5 pt-1">
+                            <button v-for="amt in [1, 1000, 10000, 50000]" :key="amt" type="button" @click="txAmount = amt" class="px-2 py-0.5 rounded text-[10px] font-bold border transition" :class="txAmount === amt ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'">
+                                Rp {{ amt.toLocaleString('id-ID') }}
+                            </button>
+                        </div>
                     </div>
                     <div class="space-y-1">
                         <label class="text-xs font-bold text-slate-400">Metode Transaksi</label>

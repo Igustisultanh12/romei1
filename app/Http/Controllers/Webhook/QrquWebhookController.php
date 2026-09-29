@@ -34,23 +34,52 @@ class QrquWebhookController extends Controller
             ]
         ]);
 
-        // 1. Verifikasi Keaslian Kriptografis Webhook Signature (HMAC-SHA256)
         $signature = $request->header('X-QRQU-Signature') ?? $request->header('X-QRQU-SIGNATURE');
         $webhookSecret = QrquService::getWebhookSecret();
-
-        if (!empty($webhookSecret)) {
-            $expectedSignature = hash_hmac('sha256', $rawBody, $webhookSecret);
-            if (!hash_equals($expectedSignature, (string) $signature)) {
-                Log::warning('QRqu Webhook Ditolak: Tanda tangan HMAC-SHA256 tidak valid.');
-                return response()->json(['message' => 'Invalid Webhook Signature'], 401);
-            }
-        }
+        $apiSecret = QrquService::getApiSecret();
 
         $externalId = $data['external_id'] ?? null;
         $qrquInvoiceId = $data['invoice_id'] ?? null;
         $qrquTransactionId = $data['transaction_id'] ?? $qrquInvoiceId ?? 'N/A';
-        $event = $data['event'] ?? $request->header('X-QRQU-Event') ?? '';
+        $event = strtolower((string) ($data['event'] ?? $request->header('X-QRQU-Event') ?? $request->header('X-QRQU-EVENT') ?? ''));
         $status = strtoupper($data['status'] ?? '');
+
+        // 1. Verifikasi Keaslian Kriptografis Webhook Signature (HMAC-SHA256)
+        if (!empty($webhookSecret) || !empty($apiSecret)) {
+            $expectedWebhookSig = !empty($webhookSecret) ? hash_hmac('sha256', $rawBody, $webhookSecret) : '';
+            $expectedApiSig = !empty($apiSecret) ? hash_hmac('sha256', $rawBody, $apiSecret) : '';
+
+            $isSigValid = ($expectedWebhookSig !== '' && hash_equals($expectedWebhookSig, (string) $signature))
+                || ($expectedApiSig !== '' && hash_equals($expectedApiSig, (string) $signature));
+
+            if (!$isSigValid) {
+                Log::warning('QRqu Webhook Ditolak: Tanda tangan HMAC-SHA256 tidak valid.', [
+                    'event' => $event,
+                    'has_webhook_secret' => !empty($webhookSecret),
+                    'has_api_secret' => !empty($apiSecret),
+                ]);
+
+                $errMessage = 'Invalid Webhook Signature. Pastikan Webhook Secret di Pengaturan Admin Romei sama dengan Webhook Secret di QRqu.';
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $errMessage,
+                ], 401);
+            }
+        }
+
+        // 1b. PENANGANAN EVENT PING TEST DARI DASHBOARD QRQU
+        if ($event === 'ping.test' || str_contains($event, 'ping')) {
+            Log::info('QRqu Webhook: Event Ping Test diterima dengan sukses dari platform QRqu.', [
+                'event_id' => $data['event_id'] ?? null,
+                'message'  => $data['message'] ?? 'Ping OK',
+            ]);
+            return response()->json([
+                'status'    => 'success',
+                'message'   => 'Webhook ping test received successfully by ROMEI platform',
+                'event'     => $event,
+                'timestamp' => time(),
+            ], 200);
+        }
 
         if (!$externalId && !$qrquInvoiceId) {
             Log::error('QRqu Webhook Gagal: Tidak ada identifikasi invoice atau external_id.');
