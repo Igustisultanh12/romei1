@@ -19,21 +19,7 @@ const showQrisDisplay = ref(false);
 const qrisPaymentUrl = ref('');
 const activeTransactionNumber = ref('');
 const isGenerating = ref(false);
-const walletViewMode = ref('barcode'); // 'barcode' atau 'full'
-const DEFAULT_OFFSET = -565;
-const barcodeTopOffset = ref(parseInt(localStorage.getItem('romei_qris_top_offset_v2') || DEFAULT_OFFSET.toString()));
 let pollingInterval = null;
-
-const adjustOffset = (delta) => {
-    barcodeTopOffset.value += delta;
-    localStorage.setItem('romei_qris_top_offset_v2', barcodeTopOffset.value.toString());
-};
-
-const resetOffset = () => {
-    barcodeTopOffset.value = DEFAULT_OFFSET;
-    localStorage.removeItem('romei_qris_top_offset_v2');
-    localStorage.removeItem('romei_qris_top_offset');
-};
 
 const depositForm = useForm({
     amount: ''
@@ -44,7 +30,6 @@ const openDepositModal = () => {
     showQrisDisplay.value = false;
     qrisPaymentUrl.value = '';
     activeTransactionNumber.value = '';
-    walletViewMode.value = 'barcode';
 };
 
 const closeDepositModal = () => { 
@@ -251,98 +236,19 @@ const isRefund = (tx) => {
                 </div>
 
                 <div v-else class="text-center space-y-4 py-2">
-                    <div class="flex items-center justify-between pb-2 border-b border-gray-100">
-                        <div class="text-left">
-                            <h3 class="text-sm font-bold text-gray-900">Pindai QRIS Resmi ROMEI</h3>
-                            <p class="text-[11px] text-gray-400 font-mono">Invoice: {{ activeTransactionNumber }}</p>
-                        </div>
-                        <div class="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 text-[11px] font-bold">
-                            <button 
-                                type="button"
-                                @click="walletViewMode = 'barcode'"
-                                :class="walletViewMode === 'barcode' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-900'"
-                                class="px-2.5 py-1 rounded-md transition"
-                            >
-                                Barcode Saja
-                            </button>
-                            <button 
-                                type="button"
-                                @click="walletViewMode = 'full'"
-                                :class="walletViewMode === 'full' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-900'"
-                                class="px-2.5 py-1 rounded-md transition"
-                            >
-                                Penuh
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- MODE 1: BARCODE QRIS FOKUS (SEPERTI GAMBAR 2) -->
-                    <div v-if="walletViewMode === 'barcode'" class="space-y-3">
-                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
-                            <span class="text-gray-500 font-medium">Nominal Top Up:</span>
-                            <span class="font-bold font-mono text-sm text-gray-900">{{ formatRupiah(depositForm.amount) }}</span>
-                        </div>
-
-                        <!-- KOTAK BARCODE FOKUS QRIS -->
-                        <div class="relative w-[340px] h-[360px] mx-auto overflow-hidden rounded-2xl bg-[#FAFAFA] border-2 border-gray-200 shadow-md flex items-center justify-center">
-                            <iframe 
-                                :src="qrisPaymentUrl" 
-                                class="absolute border-0 select-none pointer-events-none" 
-                                :style="{
-                                    width: '440px',
-                                    height: '950px',
-                                    top: `${barcodeTopOffset}px`,
-                                    left: '50%',
-                                    transform: 'translateX(-50%)'
-                                }"
-                                scrolling="no"
-                            ></iframe>
-                        </div>
-
-                        <!-- Kontrol Presisi Posisi (Mikro Penyesuaian) -->
-                        <div class="flex items-center justify-center gap-2 text-[10px] text-gray-400">
-                            <span>Posisi Barcode:</span>
-                            <button 
-                                type="button" 
-                                @click="adjustOffset(-10)" 
-                                class="px-2 py-0.5 rounded border border-gray-200 bg-white hover:bg-gray-50 font-mono font-bold text-gray-600"
-                                title="Geser Konten Lebih Naik 10px"
-                            >
-                                Lebih Naik
-                            </button>
-                            <button 
-                                type="button" 
-                                @click="adjustOffset(10)" 
-                                class="px-2 py-0.5 rounded border border-gray-200 bg-white hover:bg-gray-50 font-mono font-bold text-gray-600"
-                                title="Geser Konten Turun 10px"
-                            >
-                                Turun
-                            </button>
-                            <button 
-                                v-if="barcodeTopOffset !== DEFAULT_OFFSET"
-                                type="button" 
-                                @click="resetOffset" 
-                                class="px-1.5 py-0.5 text-indigo-600 hover:underline"
-                            >
-                                Reset
-                            </button>
-                        </div>
-
-                        <p class="text-xs text-gray-500 font-medium px-2 leading-relaxed">
-                            Arahkan kamera aplikasi m-Banking atau E-Wallet pilihan Anda ke barcode di atas untuk membayar.
-                        </p>
-                    </div>
-
-                    <!-- MODE 2: TAMPILAN LENGKAP HALAMAN DOKU -->
-                    <div v-else class="w-full h-[520px] mx-auto bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+                    <h3 class="text-md font-bold text-gray-900">Pindai QRIS Resmi ROMEI</h3>
+                    <p class="text-xs text-gray-400 font-medium px-2">Silakan lakukan pemindaian menggunakan aplikasi perbankan atau e-wallet pilihan Anda.</p>
+                    
+                    <div class="w-full h-[500px] mx-auto bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center overflow-hidden p-1 shadow-inner relative">
                         <iframe 
                             :src="qrisPaymentUrl" 
-                            class="w-full h-full border-0"
-                            allow="geolocation; microphone; camera font-mono"
+                            class="absolute border-0 rounded-lg origin-top" 
+                            style="width: 700px; height: 800px; transform: scale(0.6); transform-origin: top center; top: 0;"
+                            scrolling="no"
                         ></iframe>
                     </div>
 
-                    <div class="flex items-center justify-center space-x-2 text-xs text-indigo-600 font-bold bg-indigo-50 py-2 rounded-xl animate-pulse">
+                    <div class="flex items-center justify-center space-x-2 text-xs text-indigo-600 font-bold bg-indigo-50 py-2.5 rounded-xl animate-pulse">
                         <svg class="animate-spin h-3.5 w-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -350,19 +256,9 @@ const isRefund = (tx) => {
                         <span>Menanti Sinkronisasi Pembayaran...</span>
                     </div>
 
-                    <div class="flex items-center justify-between pt-1">
-                        <a 
-                            :href="qrisPaymentUrl" 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            class="text-[11px] text-indigo-600 hover:underline font-semibold"
-                        >
-                            Buka di Tab Baru
-                        </a>
-                        <button type="button" @click="closeDepositModal" class="py-1.5 px-3 border border-gray-200 text-gray-400 font-bold text-xs rounded-xl hover:bg-gray-50 transition-all">
-                            Tutup & Batalkan
-                        </button>
-                    </div>
+                    <button type="button" @click="closeDepositModal" class="w-full py-2 border border-gray-200 text-gray-400 font-bold text-xs rounded-xl hover:bg-gray-50 transition-all">
+                        Tutup & Batalkan Pengajuan
+                    </button>
                 </div>
 
             </div>
