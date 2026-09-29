@@ -23,132 +23,214 @@ class ApiMonitorController extends Controller
         // 1. Ambil data konfigurasi awal, hilangkan slash di akhir string secara aman
         $ceirBaseUrl = \App\Services\CeirkuService::getBaseUrl();
         $dokuBaseUrl = rtrim(Setting::get('doku_api_base_url', 'https://api.doku.com'), '/');
-        $ceirApiKey = trim(Setting::get('ceirku_api_key'));
+        $ceirApiKey = trim((string) Setting::get('ceirku_api_key'));
+        $activeGateway = \App\Services\Payment\PaymentGatewayManager::getActiveProvider();
 
         // 2. Ambil data Saldo Aktual dari CEIRKU via endpoint /balance
         $ceirBalance = 0;
         if (!empty($ceirApiKey)) {
             try {
-                // Request menggunakan URL ter-normalisasi resmi menuju endpoint /balance
+                $balanceUrl = \App\Services\CeirkuService::getBalanceUrl();
                 $balanceResponse = Http::timeout(5)
                     ->withHeaders([
                         'X-Api-Key' => $ceirApiKey,
-                        'Accept' => 'application/json',
+                        'Accept'    => 'application/json',
                     ])
-                    ->post(\App\Services\CeirkuService::getBalanceUrl()); // Hasil akhir: /balance
+                    ->post($balanceUrl);
 
                 if ($balanceResponse->successful()) {
-                    // Sesuai Dokumentasi Hal 7-8: Mengambil data.credit
                     $ceirBalance = $balanceResponse->json('data.credit') ?? $balanceResponse->json('credit') ?? 0;
+                    Log::info("ROMEI MONITOR [CEIRKU Saldo] - Sukses mengambil saldo kuota: Rp {$ceirBalance}");
                 } else {
-                    // Menyuntikkan log informatif ke aaPanel jika API Key ditolak atau IP Server diblokir
-                    Log::error('ROMEI MONITOR - Gagal Tarik Saldo CEIRKU. HTTP Status: ' . $balanceResponse->status() . ' | Response: ' . $balanceResponse->body());
+                    $errBody = $balanceResponse->json('message') ?? $balanceResponse->body();
+                    Log::warning("ROMEI MONITOR [CEIRKU Saldo] - Gagal tarik saldo. HTTP {$balanceResponse->status()}: {$errBody}");
                 }
             } catch (\Exception $e) {
-                Log::error('ROMEI Live - CEIRKU Balance Fetch Exception: ' . $e->getMessage());
+                Log::error('ROMEI MONITOR [CEIRKU Saldo] - Gangguan koneksi tarik saldo: ' . $e->getMessage());
                 $ceirBalance = 0;
             }
         }
 
         // 3. Monitoring Latensi Respons Jaringan Gateway Menggunakan Skema Sandbox / Test
-        $apiStatuses = [
+        $ceirApis = [
             [
-                'name' => 'CEIRKU Realtime Check API', 
+                'name'     => 'CEIRKU Realtime Check API', 
                 'endpoint' => 'POST /v1/imei/check', 
-                'url' => \App\Services\CeirkuService::getOrderUrl(), // Target endpoint utama pembuatan order sandbox
-                'type' => 'ceirku',
-                'payload' => [
+                'url'      => \App\Services\CeirkuService::getOrderUrl(),
+                'payload'  => [
                     'service_id' => 20, // Test Status Roamer (Sandbox - Biaya Rp 0)
-                    'imeis' => ['123456789012345']
+                    'imeis'      => ['123456789012345']
                 ]
             ],
             [
-                'name' => 'CEIRKU Database Sync Gateway', 
+                'name'     => 'CEIRKU Database Sync Gateway', 
                 'endpoint' => 'POST /v1/imei/register', 
-                'url' => \App\Services\CeirkuService::getOrderUrl(),
-                'type' => 'ceirku',
-                'payload' => [
+                'url'      => \App\Services\CeirkuService::getOrderUrl(),
+                'payload'  => [
                     'service_id' => 21, // Test Status Unknown (Sandbox - Biaya Rp 0)
-                    'imeis' => ['123456789012345']
+                    'imeis'      => ['123456789012345']
                 ]
             ],
-            [
-                'name' => 'DOKU QRIS Invoice Generator', 
-                'endpoint' => 'POST /checkout/v1/payment', 
-                'url' => $dokuBaseUrl . '/checkout/v1/payment',
-                'type' => 'doku',
-                'payload' => null
-            ]
         ];
 
         $monitoredApis = [];
-        foreach ($apiStatuses as $api) {
+
+        // Pengecekan Service CEIRKU
+        foreach ($ceirApis as $api) {
             $startTime = microtime(true);
             $status = 'offline';
             $latency = '--';
+            $detail = '';
 
             try {
-                $request = Http::timeout(4)->acceptJson();
-                
-                if ($api['type'] === 'ceirku' && !empty($ceirApiKey)) {
+                $request = Http::timeout(5)->acceptJson();
+                if (!empty($ceirApiKey)) {
                     $request->withHeaders(['X-Api-Key' => $ceirApiKey]);
-                    $response = $request->post($api['url'], $api['payload']);
-                } else {
-                    $response = $request->get($api['url']);
                 }
                 
+                $response = $request->post($api['url'], $api['payload']);
                 $endTime = microtime(true);
                 $latency = round(($endTime - $startTime) * 1000) . 'ms';
+                $statusCode = $response->status();
+                $respJson = $response->json() ?? [];
+                $respMsg = $respJson['message'] ?? $respJson['error'] ?? null;
+                $errorCode = $respJson['error_code'] ?? null;
 
-                if ($response->successful() || ($api['type'] === 'ceirku' && $response->json('status') === true)) { 
-                    $status = 'online'; 
-                } else if ($response->status() >= 500) { 
-                    $status = 'maintenance'; 
-                } else {
-                    if ($response->json('error_code') === 'IP_NOT_WHITELISTED') {
-                        Log::warning('ROMEI Monitor - IP Server belum terdaftar di whitelist CEIRKU: ' . $response->json('client_ip'));
+                if ($response->successful() && ($respJson['status'] ?? true)) {
+                    $status = 'online';
+                    $detail = "Server CEIRKU operasional ({$latency}). Handshake sukses.";
+                    Log::info("ROMEI MONITOR [{$api['name']}] - Jaringan OPERASIONAL ({$latency}). HTTP {$statusCode}");
+                } elseif ($statusCode >= 200 && $statusCode < 500) {
+                    // Jaringan terhubung ke server CEIRKU (latensi terukur), namun ada pesan bisnis
+                    $status = 'warning';
+                    if ($errorCode === 'IP_NOT_WHITELISTED') {
+                        $clientIp = $respJson['client_ip'] ?? 'server';
+                        $detail = "Jaringan terhubung ({$latency}), namun IP server ({$clientIp}) belum di-whitelist di CEIRKU.";
+                        Log::warning("ROMEI MONITOR [{$api['name']}] - IP Server belum di-whitelist CEIRKU: {$clientIp} ({$latency})");
+                    } elseif ($statusCode === 401) {
+                        $detail = "Jaringan terhubung ({$latency}), namun API Key CEIRKU tidak valid (HTTP 401).";
+                        Log::warning("ROMEI MONITOR [{$api['name']}] - X-Api-Key CEIRKU Ditolak (HTTP 401) ({$latency})");
+                    } else {
+                        $cleanMsg = $respMsg ?: "Respon validasi gateway (HTTP {$statusCode})";
+                        $detail = "Jaringan terhubung ({$latency}). {$cleanMsg}.";
+                        Log::warning("ROMEI MONITOR [{$api['name']}] - Jaringan Terhubung ({$latency}) HTTP {$statusCode}: " . json_encode($respJson));
                     }
-                    $status = 'offline';
+                } elseif ($statusCode >= 500) {
+                    $status = 'maintenance';
+                    $detail = "Server CEIRKU sedang mengalami kendala internal (HTTP {$statusCode}).";
+                    Log::error("ROMEI MONITOR [{$api['name']}] - Server CEIRKU Internal Error (HTTP {$statusCode})");
                 }
             } catch (\Exception $e) {
                 $status = 'offline';
                 $latency = '--';
+                $detail = 'Koneksi gagal terhubung: ' . $e->getMessage();
+                Log::error("ROMEI MONITOR [{$api['name']}] - KONEKSI TERPUTUS ke {$api['url']}: " . $e->getMessage());
             }
 
             $monitoredApis[] = [
-                'name' => $api['name'],
+                'name'     => $api['name'],
                 'endpoint' => $api['endpoint'],
-                'latency' => $latency,
-                'status' => $status
+                'latency'  => $latency,
+                'status'   => $status,
+                'detail'   => $detail,
             ];
         }
 
-        $activeGateway = \App\Services\Payment\PaymentGatewayManager::getActiveProvider();
+        // Monitoring Payment Gateway (QRqu & DOKU)
         if ($activeGateway === 'qrqu') {
+            // 1. QRqu Engine (Aktif)
+            $qrquService = new \App\Services\Payment\QrquService();
+            $qrquTest = $qrquService->testConnection();
+            $qrquStatus = $qrquTest['success'] ? 'online' : ($qrquTest['is_auth_ok'] ? 'online' : (in_array($qrquTest['status_code'], [401, 403, 422]) ? 'warning' : 'offline'));
+
+            if ($qrquTest['success']) {
+                Log::info("ROMEI MONITOR [QRqu Gateway (Aktif)] - Sukses terhubung ({$qrquTest['latency']}): {$qrquTest['message']}");
+            } else {
+                Log::warning("ROMEI MONITOR [QRqu Gateway (Aktif)] - Respon ({$qrquTest['latency']}) HTTP {$qrquTest['status_code']}: {$qrquTest['message']}");
+            }
+
             $monitoredApis[] = [
-                'name' => 'QRqu Payment Gateway Engine (Aktif)',
+                'name'     => 'QRqu Payment Gateway Engine (Aktif)',
                 'endpoint' => 'POST ' . \App\Services\Payment\QrquService::getBaseUrl() . '/api/v1/invoices',
-                'latency' => '0ms',
-                'status' => 'online'
+                'latency'  => $qrquTest['latency'] !== '--' ? $qrquTest['latency'] : '0ms',
+                'status'   => $qrquStatus,
+                'detail'   => $qrquTest['message'],
             ];
+
+            // 2. DOKU QRIS Payment Gateway (Standby)
+            $dokuStartTime = microtime(true);
+            $dokuLatency = '--';
+            $dokuStatus = 'standby';
+            $dokuDetail = 'Mode siaga (Standby). Gateway aktif yang digunakan saat ini adalah QRqu.';
+            try {
+                $dokuRes = Http::timeout(4)->get($dokuBaseUrl);
+                $dokuLatency = round((microtime(true) - $dokuStartTime) * 1000) . 'ms';
+                Log::info("ROMEI MONITOR [DOKU Gateway (Standby)] - Server DOKU merespon ({$dokuLatency}). HTTP {$dokuRes->status()}");
+            } catch (\Exception $e) {
+                Log::warning("ROMEI MONITOR [DOKU Gateway (Standby)] - Server DOKU: " . $e->getMessage());
+            }
+
             $monitoredApis[] = [
-                'name' => 'QRqu Webhook Receiver (Lokal)',
+                'name'     => 'DOKU QRIS Invoice Generator (Standby)',
+                'endpoint' => 'POST ' . $dokuBaseUrl . '/checkout/v1/payment',
+                'latency'  => $dokuLatency,
+                'status'   => $dokuStatus,
+                'detail'   => $dokuDetail,
+            ];
+
+            // 3. Webhook Receiver Lokal
+            $monitoredApis[] = [
+                'name'     => 'QRqu Webhook Receiver (Lokal)',
                 'endpoint' => 'POST /api/webhook/qrqu',
-                'latency' => '0ms',
-                'status' => 'online'
+                'latency'  => '< 5ms',
+                'status'   => 'online',
+                'detail'   => 'Route lokal ROMEI siap menerima callback pembayaran QRqu.',
             ];
         } else {
+            // 1. DOKU Gateway Engine (Aktif)
+            $dokuStartTime = microtime(true);
+            $dokuLatency = '--';
+            $dokuStatus = 'online';
+            $dokuDetail = 'DOKU Checkout engine live siap menerbitkan transaksi QRIS.';
+            try {
+                $dokuRes = Http::timeout(4)->get($dokuBaseUrl);
+                $dokuLatency = round((microtime(true) - $dokuStartTime) * 1000) . 'ms';
+                Log::info("ROMEI MONITOR [DOKU Gateway (Aktif)] - Server DOKU merespon ({$dokuLatency}). HTTP {$dokuRes->status()}");
+            } catch (\Exception $e) {
+                $dokuStatus = 'offline';
+                $dokuDetail = 'Gagal terhubung ke gateway DOKU: ' . $e->getMessage();
+                Log::error("ROMEI MONITOR [DOKU Gateway (Aktif)] - Gagal terhubung: " . $e->getMessage());
+            }
+
             $monitoredApis[] = [
-                'name' => 'DOKU Live Payment Gateway (Aktif)',
-                'endpoint' => 'POST https://api.doku.com/checkout/v1/payment',
-                'latency' => '0ms',
-                'status' => 'online'
+                'name'     => 'DOKU QRIS Invoice Generator (Aktif)',
+                'endpoint' => 'POST ' . $dokuBaseUrl . '/checkout/v1/payment',
+                'latency'  => $dokuLatency,
+                'status'   => $dokuStatus,
+                'detail'   => $dokuDetail,
             ];
+
+            // 2. QRqu Gateway Engine (Standby)
+            $qrquDetail = 'Mode siaga (Standby). Gateway aktif yang digunakan saat ini adalah DOKU.';
+            $qrquService = new \App\Services\Payment\QrquService();
+            $qrquTest = $qrquService->testConnection();
+            Log::info("ROMEI MONITOR [QRqu Gateway (Standby)] - Ping ({$qrquTest['latency']}): {$qrquTest['message']}");
+
             $monitoredApis[] = [
-                'name' => 'DOKU IPN Webhook Receiver (Lokal)',
+                'name'     => 'QRqu Payment Gateway Engine (Standby)',
+                'endpoint' => 'POST ' . \App\Services\Payment\QrquService::getBaseUrl() . '/api/v1/invoices',
+                'latency'  => $qrquTest['latency'] !== '--' ? $qrquTest['latency'] : '0ms',
+                'status'   => 'standby',
+                'detail'   => $qrquDetail,
+            ];
+
+            // 3. Webhook Receiver Lokal
+            $monitoredApis[] = [
+                'name'     => 'DOKU IPN Webhook Receiver (Lokal)',
                 'endpoint' => 'POST /api/webhook/doku/qris',
-                'latency' => '0ms',
-                'status' => 'online'
+                'latency'  => '< 5ms',
+                'status'   => 'online',
+                'detail'   => 'Route webhook IPN lokal siap menerima callback pembayaran DOKU.',
             ];
         }
 

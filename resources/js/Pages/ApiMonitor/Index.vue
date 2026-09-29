@@ -10,7 +10,9 @@ import {
     WalletIcon,
     CreditCardIcon,
     QrCodeIcon,
-    XMarkIcon
+    XMarkIcon,
+    ClockIcon,
+    XCircleIcon
 } from '@heroicons/vue/24/outline';
 import axios from 'axios';
 
@@ -240,25 +242,49 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div v-for="(api, index) in props.apis" :key="index" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm flex items-start justify-between transition-colors duration-300">
-                    <div class="space-y-2">
-                        <div>
-                            <h4 class="text-sm font-bold text-slate-900 dark:text-white tracking-tight">{{ api.name }}</h4>
-                            <span class="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded mt-1 inline-block">
+                <div v-for="(api, index) in props.apis" :key="index" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm flex flex-col justify-between transition-colors duration-300 space-y-4">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="space-y-1.5 flex-1 min-w-0">
+                            <h4 class="text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">{{ api.name }}</h4>
+                            <span class="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded inline-block truncate max-w-full">
                                 {{ api.endpoint }}
                             </span>
                         </div>
-                        <div class="text-xs text-slate-400 flex items-center gap-3">
-                            <span>Latensi Respon: <strong :class="getLatencyClass(api.latency)" class="font-mono ml-0.5">{{ api.latency }}</strong></span>
+                        <div class="shrink-0 text-right">
+                            <span v-if="api.status === 'online'" class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
+                                <CheckCircleIcon class="w-3.5 h-3.5" /> Operasional
+                            </span>
+                            <span v-else-if="api.status === 'warning'" class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400 ring-1 ring-inset ring-amber-500/20">
+                                <ExclamationTriangleIcon class="w-3.5 h-3.5" /> Terhubung
+                            </span>
+                            <span v-else-if="api.status === 'standby'" class="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-bold text-blue-600 dark:text-blue-400 ring-1 ring-inset ring-blue-500/20">
+                                <ClockIcon class="w-3.5 h-3.5" /> Siaga (Standby)
+                            </span>
+                            <span v-else-if="api.status === 'maintenance'" class="inline-flex items-center gap-1 rounded-full bg-orange-500/10 px-2.5 py-0.5 text-xs font-bold text-orange-600 dark:text-orange-400 ring-1 ring-inset ring-orange-500/20">
+                                <ExclamationTriangleIcon class="w-3.5 h-3.5" /> Pemeliharaan
+                            </span>
+                            <span v-else class="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-bold text-red-600 dark:text-red-400 ring-1 ring-inset ring-red-500/20">
+                                <XCircleIcon class="w-3.5 h-3.5" /> Terputus
+                            </span>
                         </div>
                     </div>
-                    <div class="text-right">
-                        <span v-if="api.status === 'online'" class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-500 ring-1 ring-inset ring-emerald-500/20">
-                            <CheckCircleIcon class="w-3.5 h-3.5" /> Operasional
-                        </span>
-                        <span v-else class="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-bold text-red-500 ring-1 ring-inset ring-red-500/20">
-                            <ExclamationTriangleIcon class="w-3.5 h-3.5" /> Terputus
-                        </span>
+
+                    <div class="pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>Latensi Respon Jaringan</span>
+                            <strong :class="getLatencyClass(api.latency)" class="font-mono">{{ api.latency }}</strong>
+                        </div>
+                        <p v-if="api.detail" class="text-[11px] leading-relaxed font-medium"
+                            :class="{
+                                'text-slate-500 dark:text-slate-400': api.status === 'online',
+                                'text-amber-600 dark:text-amber-400': api.status === 'warning',
+                                'text-blue-600 dark:text-blue-400': api.status === 'standby',
+                                'text-orange-600 dark:text-orange-400': api.status === 'maintenance',
+                                'text-rose-600 dark:text-rose-400': api.status === 'offline'
+                            }"
+                        >
+                            {{ api.detail }}
+                        </p>
                     </div>
                 </div>
             </div>

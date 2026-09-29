@@ -469,4 +469,28 @@ class PaymentGatewaySelectionTest extends TestCase
         ]);
         $this->assertStringContainsString('API Key tidak terdaftar', $response->json('message'));
     }
+
+    public function test_admin_api_monitor_displays_gateway_and_detailed_diagnostics(): void
+    {
+        Setting::set('payment_gateway_provider', 'qrqu');
+        Setting::set('qrqu_api_url', 'https://qrqu.id');
+        Setting::set('ceirku_api_key', 'test_ceir_key');
+
+        Http::fake([
+            'https://ceirku.net/api/v1/balance' => Http::response(['status' => true, 'data' => ['credit' => 25000]], 200),
+            'https://ceirku.net/api/v1/order'   => Http::response(['status' => false, 'message' => 'Saldo kuota tidak mencukupi'], 400),
+            'https://qrqu.id/api/health'        => Http::response(['status' => 'UP'], 200),
+            'https://api.doku.com'              => Http::response(['status' => 'OK'], 200),
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('admin.monitoring'));
+
+        $response->assertStatus(200);
+        $response->assertInertia(fn ($page) => $page
+            ->component('ApiMonitor/Index')
+            ->has('apis', 5)
+            ->where('ceir_balance', 500000)
+            ->where('active_gateway', 'qrqu')
+        );
+    }
 }
