@@ -40,15 +40,17 @@ const activePaymentUrl = ref('');
 const currentInvoiceId = ref('');
 const dokuViewMode = ref('barcode'); // 'barcode' atau 'full'
 const copiedInvoice = ref(false);
-const barcodeTopOffset = ref(parseInt(localStorage.getItem('romei_qris_top_offset') || '-535'));
+const DEFAULT_OFFSET = -565;
+const barcodeTopOffset = ref(parseInt(localStorage.getItem('romei_qris_top_offset_v2') || DEFAULT_OFFSET.toString()));
 
 const adjustOffset = (delta) => {
     barcodeTopOffset.value += delta;
-    localStorage.setItem('romei_qris_top_offset', barcodeTopOffset.value.toString());
+    localStorage.setItem('romei_qris_top_offset_v2', barcodeTopOffset.value.toString());
 };
 
 const resetOffset = () => {
-    barcodeTopOffset.value = -535;
+    barcodeTopOffset.value = DEFAULT_OFFSET;
+    localStorage.removeItem('romei_qris_top_offset_v2');
     localStorage.removeItem('romei_qris_top_offset');
 };
 
@@ -275,13 +277,13 @@ onBeforeUnmount(() => {
                         </div>
 
                         <!-- KOTAK BARCODE FOKUS QRIS (VIEWPORT CLIPPING DOKU DENGAN PRESISI GAMBAR 2) -->
-                        <div class="relative w-[340px] h-[340px] mx-auto overflow-hidden rounded-2xl bg-[#FAFAFA] dark:bg-white border-2 border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center">
+                        <div class="relative w-[340px] h-[360px] mx-auto overflow-hidden rounded-2xl bg-[#FAFAFA] dark:bg-white border-2 border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center">
                             <iframe 
                                 :src="activePaymentUrl" 
                                 class="absolute border-0 select-none pointer-events-none"
                                 :style="{
                                     width: '440px',
-                                    height: '920px',
+                                    height: '950px',
                                     top: `${barcodeTopOffset}px`,
                                     left: '50%',
                                     transform: 'translateX(-50%)'
@@ -292,25 +294,25 @@ onBeforeUnmount(() => {
 
                         <!-- Kontrol Presisi Posisi (Mikro Penyesuaian) -->
                         <div class="mt-2 flex items-center justify-center gap-2 text-[10px] text-slate-400">
-                            <span>Penyesuaian Barcode:</span>
+                            <span>Posisi Barcode:</span>
                             <button 
                                 type="button" 
-                                @click="adjustOffset(5)" 
+                                @click="adjustOffset(-10)" 
                                 class="px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono font-bold text-slate-600 dark:text-slate-300"
-                                title="Geser Turun 5px"
+                                title="Geser Konten Lebih Naik 10px"
+                            >
+                                Lebih Naik
+                            </button>
+                            <button 
+                                type="button" 
+                                @click="adjustOffset(10)" 
+                                class="px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono font-bold text-slate-600 dark:text-slate-300"
+                                title="Geser Konten Turun 10px"
                             >
                                 Turun
                             </button>
                             <button 
-                                type="button" 
-                                @click="adjustOffset(-5)" 
-                                class="px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono font-bold text-slate-600 dark:text-slate-300"
-                                title="Geser Naik 5px"
-                            >
-                                Naik
-                            </button>
-                            <button 
-                                v-if="barcodeTopOffset !== -535"
+                                v-if="barcodeTopOffset !== DEFAULT_OFFSET"
                                 type="button" 
                                 @click="resetOffset" 
                                 class="px-1.5 py-0.5 text-blue-500 hover:underline"
