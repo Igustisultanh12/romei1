@@ -12,7 +12,11 @@ class PaymentGatewayManager
      */
     public static function getActiveProvider(): string
     {
-        $provider = strtolower(trim((string) Setting::get('payment_gateway_provider', 'doku')));
+        $val = Setting::get('payment_gateway_provider');
+        if (empty($val)) {
+            $val = Setting::get('active_payment_gateway');
+        }
+        $provider = strtolower(trim((string) ($val ?: 'doku')));
         return in_array($provider, ['doku', 'qrqu'], true) ? $provider : 'doku';
     }
 

@@ -43,17 +43,8 @@ const avatarInitial = computed(() => {
     return name.charAt(0).toUpperCase();
 });
 
-// Route URL profil fleksibel
+// Route URL profil terintegrasi ke Manajemen Pusat Akun (Account Settings)
 const profileUrl = computed(() => {
-    try {
-        if (route().has('profile.edit')) {
-            return route('profile.edit');
-        }
-    } catch (e) {}
-    return '/profile';
-});
-
-const accountSettingsUrl = computed(() => {
     try {
         if (route().has('account.settings')) {
             return route('account.settings');
@@ -61,6 +52,8 @@ const accountSettingsUrl = computed(() => {
     } catch (e) {}
     return '/account/settings';
 });
+
+const accountSettingsUrl = profileUrl;
 
 // Daftar menu navigasi utama
 const navItems = computed(() => [

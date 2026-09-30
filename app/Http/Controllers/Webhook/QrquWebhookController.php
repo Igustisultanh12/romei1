@@ -34,7 +34,10 @@ class QrquWebhookController extends Controller
             ]
         ]);
 
-        $signature = $request->header('X-QRQU-Signature') ?? $request->header('X-QRQU-SIGNATURE');
+        $signature = $request->header('X-QRQU-Signature') 
+            ?? $request->header('X-QRQU-SIGNATURE') 
+            ?? $request->header('X-Signature') 
+            ?? $request->header('Signature');
         $webhookSecret = QrquService::getWebhookSecret();
         $apiSecret = QrquService::getApiSecret();
 
@@ -50,8 +53,15 @@ class QrquWebhookController extends Controller
             $expectedApiSig = !empty($apiSecret) ? hash_hmac('sha256', $rawBody, $apiSecret) : '';
             $expectedFallbackSig = hash_hmac('sha256', $rawBody, 'whsec_default_fallback');
 
+            // Coba juga dengan payload json_encode alternatif jika rawBody dimodifikasi oleh reverse proxy
+            $jsonBody = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $altWebhookSig = !empty($webhookSecret) ? hash_hmac('sha256', $jsonBody, $webhookSecret) : '';
+            $altApiSig = !empty($apiSecret) ? hash_hmac('sha256', $jsonBody, $apiSecret) : '';
+
             $isSigValid = ($expectedWebhookSig !== '' && hash_equals($expectedWebhookSig, (string) $signature))
                 || ($expectedApiSig !== '' && hash_equals($expectedApiSig, (string) $signature))
+                || ($altWebhookSig !== '' && hash_equals($altWebhookSig, (string) $signature))
+                || ($altApiSig !== '' && hash_equals($altApiSig, (string) $signature))
                 || hash_equals($expectedFallbackSig, (string) $signature);
 
             if (!$isSigValid) {
@@ -160,13 +170,18 @@ class QrquWebhookController extends Controller
                         }
                         // KONDISI B: Top Up Saldo Dompet Digital (Wallet Deposit)
                         elseif ($transaction->payable_type === Wallet::class && str_starts_with($invoiceNumber, 'INV-ROMEI-')) {
-                            $payable->deposit(
-                                amount: $transaction->amount,
-                                type: 'topup',
-                                description: "Top up saldo aman via QRIS QRqu (#{$transaction->invoice_number})",
-                                referenceId: $transaction->id
-                            );
-                            Log::info("QRqu Webhook Wallet: Saldo Rp {$transaction->amount} berhasil dikreditkan untuk invoice {$invoiceNumber}");
+                            $alreadyCredited = DB::table('wallet_transactions')
+                                ->where('reference_id', (string) $transaction->id)
+                                ->exists();
+                            if (!$alreadyCredited) {
+                                $payable->deposit(
+                                    amount: $transaction->amount,
+                                    type: 'topup',
+                                    description: "Top up saldo aman via QRIS QRqu (#{$transaction->invoice_number})",
+                                    referenceId: (string) $transaction->id
+                                );
+                                Log::info("QRqu Webhook Wallet: Saldo Rp {$transaction->amount} berhasil dikreditkan untuk invoice {$invoiceNumber}");
+                            }
                         }
                         // KONDISI C: Direct Service Check (SIM Lock / History)
                         elseif ($transaction->payable_type === Wallet::class) {

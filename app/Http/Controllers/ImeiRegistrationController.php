@@ -704,14 +704,23 @@ class ImeiRegistrationController extends Controller
             $paymentResult = \App\Services\Payment\PaymentGatewayManager::createPayment($mockTx);
 
             if (!empty($paymentResult['payment_url'])) {
+                $gatewayRef = $paymentResult['invoice_id'] ?? null;
+                if ($gatewayRef) {
+                    $transaction->update(['payment_gateway_ref' => $gatewayRef]);
+                    Cache::put('payment_qrqu_id_' . $invoiceId, $gatewayRef, 3600);
+                    Cache::put('payment_status_' . $gatewayRef, 'PENDING', 600);
+                }
+
                 Cache::put('payment_status_' . $invoiceId, 'PENDING', 600);
+
                 return response()->json([
                     'status'             => 'success',
-                    'provider'           => $paymentResult['provider'] ?? 'doku',
+                    'provider'           => $paymentResult['provider'] ?? \App\Services\Payment\PaymentGatewayManager::getActiveProvider(),
                     'invoice_number'     => $invoiceId,
                     'transaction_number' => $invoiceId,
                     'payment_url'        => $paymentResult['payment_url'],
                     'qr_string'          => $paymentResult['qr_string'] ?? null,
+                    'invoice_id'         => $gatewayRef,
                 ]);
             }
 
@@ -725,33 +734,150 @@ class ImeiRegistrationController extends Controller
 
     /**
      * Polling Realtime Status Pembayaran E-Wallet ROMEI & Jurnaling Kredit Saldo
+     * Mendukung multi-gateway (DOKU & QRqu) dengan active polling fallback
      */
     public function checkStatus($invoiceId)
     {
-        $cacheStatus = Cache::get('payment_status_' . $invoiceId, 'PENDING');
+        // 1. Cari record transaksi di database ROMEI
+        $transaction = Transaction::where('invoice_number', $invoiceId)
+            ->orWhere('payment_gateway_ref', $invoiceId)
+            ->first();
 
-        if (strtoupper($cacheStatus) === 'SUCCESS') {
+        // 2. Jika transaksi di database SUDAH berstatus SUCCESS / PAID
+        if ($transaction && in_array(strtoupper($transaction->status), ['SUCCESS', 'PAID'], true)) {
+            // Pastikan mutasi wallet top-up sudah tercatat
+            if ($transaction->payable_type === Wallet::class) {
+                $wallet = Wallet::where('id', $transaction->payable_id)->first();
+                $alreadyCredited = DB::table('wallet_transactions')
+                    ->where('reference_id', (string) $transaction->id)
+                    ->exists();
+
+                if (!$alreadyCredited && $wallet) {
+                    try {
+                        DB::transaction(function () use ($wallet, $transaction) {
+                            $lockedWallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
+                            if ($lockedWallet) {
+                                $lockedWallet->deposit(
+                                    amount: $transaction->amount,
+                                    type: 'topup',
+                                    description: "Top up saldo via Payment Gateway (#{$transaction->invoice_number})",
+                                    referenceId: (string) $transaction->id
+                                );
+                            }
+                        });
+                    } catch (\Exception $e) {
+                        Log::error("ROMEI FINANSIAL ERROR - Gagal jurnaling wallet terverifikasi: " . $e->getMessage());
+                    }
+                }
+            }
+
+            Cache::put('payment_status_' . $invoiceId, 'SUCCESS', 600);
+            if ($transaction->invoice_number) {
+                Cache::put('payment_status_' . $transaction->invoice_number, 'SUCCESS', 600);
+            }
+            if ($transaction->payment_gateway_ref) {
+                Cache::put('payment_status_' . $transaction->payment_gateway_ref, 'SUCCESS', 600);
+            }
+
+            return response()->json([
+                'status'         => 'success',
+                'payment_status' => 'SUCCESS',
+                'invoice_number' => $transaction->invoice_number,
+                'amount'         => $transaction->amount,
+            ]);
+        }
+
+        // 3. Periksa status di Cache (yang diset oleh webhook atau proses sebelumnya)
+        $cacheStatus = Cache::get('payment_status_' . $invoiceId);
+        if (!$cacheStatus && $transaction) {
+            $cacheStatus = Cache::get('payment_status_' . $transaction->invoice_number)
+                ?? ($transaction->payment_gateway_ref ? Cache::get('payment_status_' . $transaction->payment_gateway_ref) : null);
+        }
+
+        $isPaid = (strtoupper($cacheStatus ?? '') === 'SUCCESS');
+
+        // 4. Jika belum sukses di cache, lakukan ACTIVE QUERY ke gateway QRqu
+        if (!$isPaid) {
+            $qrquId = $transaction?->payment_gateway_ref 
+                ?? Cache::get('payment_qrqu_id_' . $invoiceId)
+                ?? (str_starts_with($invoiceId, 'INV-20') ? $invoiceId : null);
+
+            $qrquService = new \App\Services\Payment\QrquService();
+            $detectedStatus = null;
+
+            if ($qrquId) {
+                $detectedStatus = $qrquService->checkInvoiceStatus($qrquId);
+            }
+
+            if (!$detectedStatus && $transaction && $transaction->invoice_number) {
+                $detectedStatus = $qrquService->checkInvoiceStatus($transaction->invoice_number);
+            }
+
+            if (!$detectedStatus && !str_starts_with($invoiceId, 'INV-ROMEI-')) {
+                $detectedStatus = $qrquService->checkInvoiceStatus($invoiceId);
+            }
+
+            if (in_array(strtoupper($detectedStatus ?? ''), ['PAID', 'SUCCESS', 'SETTLED'], true)) {
+                $isPaid = true;
+            }
+        }
+
+        // 5. Jika terbukti PAID / SUCCESS (baik dari cache maupun active query gateway):
+        if ($isPaid) {
             try {
-                $transaction = Transaction::where('invoice_number', $invoiceId)->first();
-
-                if ($transaction && $transaction->status !== 'SUCCESS' && $transaction->payable_type === Wallet::class) {
+                if ($transaction && $transaction->status !== 'SUCCESS') {
                     DB::transaction(function () use ($transaction) {
-                        $wallet = Wallet::where('id', $transaction->payable_id)->lockForUpdate()->first();
-                        if ($wallet) {
-                            $wallet->update(['balance' => $wallet->balance + $transaction->amount]);
-                            $transaction->update(['status' => 'SUCCESS']);
+                        $lockedTx = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
+                        if ($lockedTx && $lockedTx->status !== 'SUCCESS') {
+                            $lockedTx->update([
+                                'status'  => 'SUCCESS',
+                                'paid_at' => now(),
+                            ]);
+
+                            if ($lockedTx->payable_type === Wallet::class) {
+                                $wallet = Wallet::where('id', $lockedTx->payable_id)->lockForUpdate()->first();
+                                if ($wallet) {
+                                    $alreadyCredited = DB::table('wallet_transactions')
+                                        ->where('reference_id', (string) $lockedTx->id)
+                                        ->exists();
+                                    if (!$alreadyCredited) {
+                                        $wallet->deposit(
+                                            amount: $lockedTx->amount,
+                                            type: 'topup',
+                                            description: "Top up saldo via Payment Gateway (#{$lockedTx->invoice_number})",
+                                            referenceId: (string) $lockedTx->id
+                                        );
+                                    }
+                                }
+                            }
                         }
                     });
                 }
             } catch (\Exception $e) {
-                Log::error("ROMEI FINANSIAL ERROR - Gagal mengkreditkan saldo otomatis: " . $e->getMessage());
-                return response()->json(['status' => 'error', 'message' => 'Gagal jurnaling saldo'], 500);
+                Log::error("ROMEI FINANSIAL ERROR - Gagal mengkreditkan saldo otomatis di checkStatus: " . $e->getMessage());
             }
 
-            return response()->json(['status' => 'success', 'payment_status' => 'SUCCESS']);
+            Cache::put('payment_status_' . $invoiceId, 'SUCCESS', 600);
+            if ($transaction) {
+                Cache::put('payment_status_' . $transaction->invoice_number, 'SUCCESS', 600);
+                if ($transaction->payment_gateway_ref) {
+                    Cache::put('payment_status_' . $transaction->payment_gateway_ref, 'SUCCESS', 600);
+                }
+            }
+
+            return response()->json([
+                'status'         => 'success',
+                'payment_status' => 'SUCCESS',
+                'invoice_number' => $transaction?->invoice_number ?? $invoiceId,
+                'amount'         => $transaction?->amount,
+            ]);
         }
 
-        return response()->json(['status' => 'pending', 'payment_status' => 'PENDING']);
+        return response()->json([
+            'status'         => 'pending',
+            'payment_status' => 'PENDING',
+            'invoice_number' => $invoiceId,
+        ]);
     }
 
     /**

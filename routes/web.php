@@ -45,6 +45,10 @@ Route::post('/feedbacks/store', [WelcomeController::class, 'storeFeedback'])->na
 Route::post('/webhook/roamer-status', [CeirkuWebhookController::class, 'handle'])
     ->name('webhook.ceirku');
 
+// 2. Direct Webhook Handlers (QRqu & DOKU Payment Gateways)
+Route::post('/webhook/qrqu', [\App\Http\Controllers\Webhook\QrquWebhookController::class, 'handleCallback'])->name('webhook.qrqu');
+Route::post('/webhook/doku/qris', [\App\Http\Controllers\Webhook\DokuWebhookController::class, 'handleQrisCallback'])->name('webhook.doku.qris');
+
 // =========================================================================
 // ROUTE PUBLIC GUEST (Mengamankan Alur Form Login & Pendaftaran Akun ROMEI)
 // =========================================================================

@@ -158,6 +158,13 @@ class SettingController extends Controller
             );
         }
 
+        if (isset($data['payment_gateway_provider'])) {
+            Setting::updateOrCreate(
+                ['key' => 'active_payment_gateway'],
+                ['value' => trim($data['payment_gateway_provider']), 'group' => 'payment']
+            );
+        }
+
         \App\Models\AuditLog::create([
             'user_id'     => auth()->id() ?? 1,
             'activity'    => 'UPDATE_SETTINGS',

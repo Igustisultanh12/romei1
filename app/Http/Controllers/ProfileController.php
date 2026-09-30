@@ -72,14 +72,11 @@ class ProfileController extends Controller
     }
 
     /**
-     * Display the user's profile form (Breeze Default).
+     * Display the user's profile form - Diintegrasikan langsung dengan Manajemen Pusat Akun ROMEI
      */
     public function edit(Request $request): Response
     {
-        return Inertia::render('Profile/Edit', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
-            'status' => session('status'),
-        ]);
+        return $this->settingsPage();
     }
 
     /**

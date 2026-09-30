@@ -18,7 +18,9 @@ const isDepositModalOpen = ref(false);
 const showQrisDisplay = ref(false);
 const qrisPaymentUrl = ref('');
 const activeTransactionNumber = ref('');
+const activeProvider = ref('doku');
 const isGenerating = ref(false);
+const isCheckingStatus = ref(false);
 let pollingInterval = null;
 
 const depositForm = useForm({
@@ -30,6 +32,7 @@ const openDepositModal = () => {
     showQrisDisplay.value = false;
     qrisPaymentUrl.value = '';
     activeTransactionNumber.value = '';
+    activeProvider.value = 'doku';
 };
 
 const closeDepositModal = () => { 
@@ -63,6 +66,7 @@ const submitDeposit = () => {
         // Menangkap data invoice_number dan payment_url resmi dari return JSON
         const txNumber = response.data.invoice_number || response.data.transaction_number;
         const linkQris = response.data.payment_url;
+        activeProvider.value = response.data.provider || 'doku';
         
         if (txNumber && linkQris) {
             activeTransactionNumber.value = txNumber;
@@ -86,34 +90,64 @@ const submitDeposit = () => {
 /**
  * SISTEM POLLING BERKALA: MENEMBAK ROUTE FINANSIAL
  */
+const handlePaymentSuccess = () => {
+    stopPaymentPolling();
+    showQrisDisplay.value = false;
+    isDepositModalOpen.value = false;
+
+    Swal.fire({
+        title: 'Top Up Berhasil!',
+        text: `Selamat, pembayaran telah terverifikasi dan saldo berhasil ditambahkan ke wallet Anda.`,
+        icon: 'success',
+        confirmButtonColor: '#4f46e5'
+    }).then(() => {
+        // Tarik data parsial dompet terbaru secara dinamis tanpa hard reload browser
+        router.reload({ only: ['wallet', 'transactions'] });
+    });
+};
+
 const startPaymentPolling = (txNumber) => {
     stopPaymentPolling();
 
-    // Hit berkala ke server setiap 3.5 detik untuk mengecek status transaksi di cache dan memicu jurnal saldo
+    // Hit berkala ke server setiap 2.5 detik untuk mengecek status transaksi dan auto-sync
     pollingInterval = setInterval(() => {
         axios.get(`/wallet/check-status/${txNumber}`)
             .then((response) => {
-                // Mendeteksi perubahan flag sukses yang dilempar oleh DOKU Webhook atau Simulasi
                 if (response.data.payment_status === 'SUCCESS' || response.data.status === 'success') {
-                    stopPaymentPolling();
-                    showQrisDisplay.value = false;
-                    isDepositModalOpen.value = false;
-
-                    Swal.fire({
-                        title: 'Top Up Berhasil!',
-                        text: `Selamat, saldo sebesar Rp ${Number(depositForm.amount).toLocaleString('id-ID')} telah ditambahkan ke wallet Anda.`,
-                        icon: 'success',
-                        confirmButtonColor: '#4f46e5'
-                    }).then(() => {
-                        // Tarik data parsial dompet terbaru secara dinamis tanpa hard reload browser
-                        router.reload({ only: ['wallet', 'transactions'] });
-                    });
+                    handlePaymentSuccess();
                 }
             })
             .catch((err) => {
                 console.error('Mesin polling mendeteksi gangguan api check-status wallet:', err);
             });
-    }, 3500);
+    }, 2500);
+};
+
+const checkStatusManual = () => {
+    if (!activeTransactionNumber.value || isCheckingStatus.value) return;
+    isCheckingStatus.value = true;
+
+    axios.get(`/wallet/check-status/${activeTransactionNumber.value}`)
+        .then((response) => {
+            if (response.data.payment_status === 'SUCCESS' || response.data.status === 'success') {
+                handlePaymentSuccess();
+            } else {
+                Swal.fire({
+                    title: 'Menunggu Pembayaran',
+                    text: 'Pembayaran belum terverifikasi di Gateway. Pastikan transaksi QRIS telah selesai, lalu klik lagi.',
+                    icon: 'info',
+                    confirmButtonColor: '#4f46e5',
+                    timer: 2500,
+                    timerProgressBar: true
+                });
+            }
+        })
+        .catch(() => {
+            Swal.fire('Kendala Jaringan', 'Gagal menghubungi server untuk memeriksa status pembayaran.', 'error');
+        })
+        .finally(() => {
+            isCheckingStatus.value = false;
+        });
 };
 
 const stopPaymentPolling = () => {
@@ -235,11 +269,21 @@ const isRefund = (tx) => {
                     </form>
                 </div>
 
-                <div v-else class="text-center space-y-4 py-2">
-                    <h3 class="text-md font-bold text-gray-900">Pindai QRIS Resmi ROMEI</h3>
-                    <p class="text-xs text-gray-400 font-medium px-2">Silakan lakukan pemindaian menggunakan aplikasi perbankan atau e-wallet pilihan Anda.</p>
+                <div v-else class="text-center space-y-3 py-2">
+                    <div class="flex items-center justify-between pb-1 border-b border-gray-100">
+                        <div class="flex items-center gap-1.5">
+                            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span class="text-xs font-black text-gray-800 uppercase tracking-wider">Gateway: {{ activeProvider.toUpperCase() }} (QRIS)</span>
+                        </div>
+                        <span class="text-[10px] font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">#{{ activeTransactionNumber }}</span>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-900">Pindai QRIS Resmi ROMEI</h3>
+                        <p class="text-[11px] text-gray-400 font-medium px-2">Silakan selesaikan pembayaran melalui aplikasi e-wallet atau perbankan.</p>
+                    </div>
                     
-                    <div class="w-full h-[500px] mx-auto bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center overflow-hidden p-1 shadow-inner relative">
+                    <div class="w-full h-[480px] mx-auto bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center overflow-hidden p-1 shadow-inner relative">
                         <iframe 
                             :src="qrisPaymentUrl" 
                             class="absolute border-0 rounded-lg origin-top" 
@@ -255,6 +299,20 @@ const isRefund = (tx) => {
                         </svg>
                         <span>Menanti Sinkronisasi Pembayaran...</span>
                     </div>
+
+                    <!-- Tombol Cek Manual Cepat -->
+                    <button 
+                        type="button" 
+                        @click="checkStatusManual" 
+                        :disabled="isCheckingStatus" 
+                        class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+                    >
+                        <svg v-if="isCheckingStatus" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>{{ isCheckingStatus ? 'Menghubungi Gateway...' : 'Sudah Bayar? Cek Status Sekarang' }}</span>
+                    </button>
 
                     <button type="button" @click="closeDepositModal" class="w-full py-2 border border-gray-200 text-gray-400 font-bold text-xs rounded-xl hover:bg-gray-50 transition-all">
                         Tutup & Batalkan Pengajuan

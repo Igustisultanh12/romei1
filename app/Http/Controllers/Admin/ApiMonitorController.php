@@ -321,7 +321,7 @@ class ApiMonitorController extends Controller
 
         // 3. Active lookup ke QRqu gateway jika ada qrquId di cache, invoice QRqu, atau gateway aktif QRqu
         $qrquId = Cache::get('payment_qrqu_id_' . $invoiceId);
-        $activeGateway = \App\Models\Setting::get('active_payment_gateway', 'doku');
+        $activeGateway = \App\Services\Payment\PaymentGatewayManager::getActiveProvider();
         if (!empty($qrquId) || $activeGateway === 'qrqu' || str_starts_with($invoiceId, 'INV-')) {
             try {
                 $targetCheckId = !empty($qrquId) ? $qrquId : $invoiceId;
