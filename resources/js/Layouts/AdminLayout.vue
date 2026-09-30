@@ -21,12 +21,15 @@ import {
     Bars3CenterLeftIcon,
     ChevronDoubleLeftIcon,
     ChevronDoubleRightIcon,
+    ChevronDownIcon,
+    UserCircleIcon,
     XMarkIcon
 } from '@heroicons/vue/24/outline';
 
 const isDark = ref(true);
 const isCollapsed = ref(false);
 const mobileNavOpen = ref(false);
+const profileDropdownOpen = ref(false);
 const page = usePage();
 
 // Mengamankan properti user agar kebal dari error "props.auth is undefined"
@@ -38,6 +41,25 @@ const adminUser = computed(() => {
 const avatarInitial = computed(() => {
     const name = adminUser.value?.name || 'A';
     return name.charAt(0).toUpperCase();
+});
+
+// Route URL profil fleksibel
+const profileUrl = computed(() => {
+    try {
+        if (route().has('profile.edit')) {
+            return route('profile.edit');
+        }
+    } catch (e) {}
+    return '/profile';
+});
+
+const accountSettingsUrl = computed(() => {
+    try {
+        if (route().has('account.settings')) {
+            return route('account.settings');
+        }
+    } catch (e) {}
+    return '/account/settings';
 });
 
 // Daftar menu navigasi utama
@@ -118,6 +140,13 @@ const handleResize = () => {
     }
 };
 
+const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+        profileDropdownOpen.value = false;
+        mobileNavOpen.value = false;
+    }
+};
+
 onMounted(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'light') {
@@ -139,10 +168,12 @@ onMounted(() => {
     }
 
     window.addEventListener('resize', handleResize);
+    window.addEventListener('keydown', handleKeydown);
 });
 
 onUnmounted(() => {
     window.removeEventListener('resize', handleResize);
+    window.removeEventListener('keydown', handleKeydown);
 });
 
 // Fungsi toggle minimize / expand sidebar
@@ -244,28 +275,38 @@ const logout = () => {
                 </Link>
             </nav>
 
-            <!-- 3. Profil & Logout Pinned Footer (shrink-0) - DIJAMIN SELALU TERLIHAT -->
+            <!-- 3. Profil & Logout Pinned Footer (shrink-0) - DIJAMIN SELALU TERLIHAT & DAPAT DIKLIK -->
             <div class="shrink-0 p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 space-y-2">
-                <!-- Info Profil (Mode Normal) -->
-                <div v-if="!isCollapsed" class="flex items-center gap-3 px-2 py-1">
-                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm shrink-0">
+                <!-- Info Profil Dapat Diklik (Mode Normal) -->
+                <Link 
+                    v-if="!isCollapsed"
+                    :href="profileUrl"
+                    class="flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all group w-full text-left cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-slate-700/60"
+                    title="Buka Pengaturan Profil Saya"
+                >
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm shrink-0 group-hover:ring-2 group-hover:ring-blue-500/40 transition">
                         {{ avatarInitial }}
                     </div>
-                    <div class="truncate">
-                        <div class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{{ adminUser.name }}</div>
-                        <div class="text-[10px] font-semibold text-slate-400">Administrator</div>
+                    <div class="truncate flex-1">
+                        <div class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">{{ adminUser.name }}</div>
+                        <div class="text-[10px] font-semibold text-slate-400">Administrator • Profil</div>
                     </div>
-                </div>
+                </Link>
 
-                <!-- Info Profil (Mode Minimized) -->
-                <div v-else class="flex justify-center py-1 group relative cursor-pointer" :title="adminUser.name">
-                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                <!-- Info Profil Dapat Diklik (Mode Minimized) -->
+                <Link 
+                    v-else
+                    :href="profileUrl"
+                    class="flex justify-center py-1 group relative cursor-pointer"
+                    :title="'Profil: ' + adminUser.name + ' (Klik untuk edit)'"
+                >
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm group-hover:ring-2 group-hover:ring-blue-500/40 transition">
                         {{ avatarInitial }}
                     </div>
-                    <div class="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-[11px] font-bold rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl z-50">
-                        {{ adminUser.name }} (Administrator)
+                    <div class="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-[11px] font-bold rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl z-50 border border-slate-700 dark:border-slate-300">
+                        {{ adminUser.name }} (Klik untuk edit profil)
                     </div>
-                </div>
+                </Link>
 
                 <!-- Tombol Logout -->
                 <button 
@@ -332,17 +373,22 @@ const logout = () => {
                     </Link>
                 </nav>
 
-                <!-- Drawer Pinned Profile & Logout -->
+                <!-- Drawer Pinned Profile & Logout (Dapat Diklik) -->
                 <div class="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2 bg-slate-50/70 dark:bg-slate-950/50">
-                    <div class="flex items-center gap-3 px-1 py-1">
+                    <Link 
+                        :href="profileUrl"
+                        @click="mobileNavOpen = false"
+                        class="flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all group w-full text-left cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-slate-700/60"
+                        title="Buka Pengaturan Profil"
+                    >
                         <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
                             {{ avatarInitial }}
                         </div>
-                        <div class="truncate">
-                            <div class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{{ adminUser.name }}</div>
-                            <div class="text-[10px] font-semibold text-slate-400">Administrator Panel</div>
+                        <div class="truncate flex-1">
+                            <div class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">{{ adminUser.name }}</div>
+                            <div class="text-[10px] font-semibold text-slate-400">Administrator • Profil</div>
                         </div>
-                    </div>
+                    </Link>
                     <button @click="logout" type="button" class="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-all">
                         <ArrowLeftOnRectangleIcon class="w-4 h-4" /> Keluar Sistem
                     </button>
@@ -386,7 +432,7 @@ const logout = () => {
                     </div>
                 </div>
                 
-                <div class="flex items-center gap-2.5">
+                <div class="flex items-center gap-3">
                     <!-- Sakelar Dark Mode -->
                     <button 
                         @click="toggleTheme" 
@@ -398,22 +444,73 @@ const logout = () => {
                         <MoonIcon v-else class="w-5 h-5 text-indigo-600" />
                     </button>
 
-                    <!-- Header Profile & Logout Pill: Terjamin Selalu Dapat Diakses dari Navbar Atas -->
-                    <div class="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-                        <div class="w-8 h-8 rounded-lg bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
-                            {{ avatarInitial }}
-                        </div>
-                        <span class="text-xs font-bold text-slate-700 dark:text-slate-300 hidden sm:inline max-w-[120px] truncate">
-                            {{ adminUser.name }}
-                        </span>
+                    <!-- Header Profile Dropdown: DAPAT DIKLIK & INTERAKTIF -->
+                    <div class="relative">
                         <button
-                            @click="logout"
+                            @click="profileDropdownOpen = !profileDropdownOpen"
                             type="button"
-                            class="p-1.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition"
-                            title="Keluar Sistem (Logout)"
+                            class="flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all focus:outline-none shadow-sm/5 group"
+                            title="Menu Pengguna Administrator"
                         >
-                            <ArrowLeftOnRectangleIcon class="w-4 h-4" />
+                            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                                {{ avatarInitial }}
+                            </div>
+                            <span class="text-xs font-bold text-slate-700 dark:text-slate-300 hidden sm:inline max-w-[120px] truncate">
+                                {{ adminUser.name }}
+                            </span>
+                            <ChevronDownIcon class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform" :class="{'rotate-180': profileDropdownOpen}" />
                         </button>
+
+                        <!-- Backdrop Click Outside -->
+                        <div v-if="profileDropdownOpen" class="fixed inset-0 z-40" @click="profileDropdownOpen = false"></div>
+
+                        <!-- Dropdown Popup Card -->
+                        <div
+                            v-if="profileDropdownOpen"
+                            class="absolute right-0 mt-2 w-60 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl py-2 z-50 text-xs font-semibold animate-fade-in divide-y divide-slate-100 dark:divide-slate-800"
+                        >
+                            <!-- Header Info -->
+                            <div class="px-4 py-3">
+                                <div class="font-bold text-slate-900 dark:text-white truncate">{{ adminUser.name }}</div>
+                                <div class="text-[10px] text-slate-400 font-mono truncate mt-0.5">{{ adminUser.email || 'admin@romei1.my.id' }}</div>
+                                <span class="inline-block mt-2 text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                                    Administrator ROMEI
+                                </span>
+                            </div>
+
+                            <!-- Menu Links -->
+                            <div class="py-1.5">
+                                <Link
+                                    :href="profileUrl"
+                                    @click="profileDropdownOpen = false"
+                                    class="flex items-center gap-2.5 px-4 py-2 text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:text-blue-600 dark:hover:text-blue-400 transition"
+                                >
+                                    <UserCircleIcon class="w-4 h-4 text-blue-500" />
+                                    <span>Edit Profil Saya</span>
+                                </Link>
+
+                                <Link
+                                    :href="accountSettingsUrl"
+                                    @click="profileDropdownOpen = false"
+                                    class="flex items-center gap-2.5 px-4 py-2 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition"
+                                >
+                                    <Cog6ToothIcon class="w-4 h-4 text-slate-400" />
+                                    <span>Pengaturan Akun & Keamanan</span>
+                                </Link>
+                            </div>
+
+                            <!-- Logout -->
+                            <div class="pt-1">
+                                <button
+                                    @click="logout"
+                                    type="button"
+                                    class="w-full flex items-center gap-2.5 px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition text-left font-bold"
+                                >
+                                    <ArrowLeftOnRectangleIcon class="w-4 h-4" />
+                                    <span>Keluar Sistem (Logout)</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </header>
