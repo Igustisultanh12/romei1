@@ -26,15 +26,16 @@ class ApiMonitorController extends Controller
         $ceirApiKey = trim((string) Setting::get('ceirku_api_key'));
         $activeGateway = \App\Services\Payment\PaymentGatewayManager::getActiveProvider();
 
-        // 2. Ambil data Saldo Aktual dari CEIRKU via endpoint /balance
+        // 2. Ambil data Saldo Aktual dari CEIRKU via endpoint /balance atau accountinfo
         $ceirBalance = 0;
         if (!empty($ceirApiKey)) {
             try {
                 $balanceUrl = \App\Services\CeirkuService::getBalanceUrl();
                 $balanceResponse = Http::timeout(5)
                     ->withHeaders([
-                        'X-Api-Key' => $ceirApiKey,
-                        'Accept'    => 'application/json',
+                        'X-Api-Key'  => $ceirApiKey,
+                        'Accept'     => 'application/json',
+                        'User-Agent' => 'Mozilla/5.0 ROMEI-Gateway/2.0',
                     ])
                     ->post($balanceUrl);
 
@@ -42,8 +43,14 @@ class ApiMonitorController extends Controller
                     $ceirBalance = $balanceResponse->json('data.credit') ?? $balanceResponse->json('credit') ?? 0;
                     Log::info("ROMEI MONITOR [CEIRKU Saldo] - Sukses mengambil saldo kuota: Rp {$ceirBalance}");
                 } else {
-                    $errBody = $balanceResponse->json('message') ?? $balanceResponse->body();
-                    Log::warning("ROMEI MONITOR [CEIRKU Saldo] - Gagal tarik saldo. HTTP {$balanceResponse->status()}: {$errBody}");
+                    $accountInfo = \App\Services\CeirkuService::getAccountInfo();
+                    if ($accountInfo['is_auth_ok'] ?? false) {
+                        $ceirBalance = $accountInfo['credit'] ?? 0;
+                        Log::info("ROMEI MONITOR [CEIRKU Saldo] - Sukses mengambil saldo kuota via accountinfo: Rp {$ceirBalance}");
+                    } else {
+                        $errBody = $balanceResponse->json('message') ?? $balanceResponse->body();
+                        Log::warning("ROMEI MONITOR [CEIRKU Saldo] - Gagal tarik saldo. HTTP {$balanceResponse->status()}: {$errBody}");
+                    }
                 }
             } catch (\Exception $e) {
                 Log::error('ROMEI MONITOR [CEIRKU Saldo] - Gangguan koneksi tarik saldo: ' . $e->getMessage());
@@ -52,23 +59,30 @@ class ApiMonitorController extends Controller
         }
 
         // 3. Monitoring Latensi Respons Jaringan Gateway Menggunakan Skema Sandbox / Test
+        $ceirUsername = \App\Services\CeirkuService::getUsername();
         $ceirApis = [
             [
                 'name'     => 'CEIRKU Realtime Check API', 
-                'endpoint' => 'POST /v1/imei/check', 
-                'url'      => \App\Services\CeirkuService::getOrderUrl(),
+                'endpoint' => 'POST /api (action: accountinfo)', 
+                'url'      => \App\Services\CeirkuService::getBaseUrl(),
                 'payload'  => [
-                    'service_id' => 20, // Test Status Roamer (Sandbox - Biaya Rp 0)
-                    'imeis'      => ['123456789012345']
+                    'username'     => $ceirUsername,
+                    'apiaccesskey' => $ceirApiKey,
+                    'action'       => 'accountinfo',
+                    'service_id'   => 20, // Test Status Roamer (Sandbox - Biaya Rp 0)
+                    'imeis'        => ['123456789012345']
                 ]
             ],
             [
                 'name'     => 'CEIRKU Database Sync Gateway', 
-                'endpoint' => 'POST /v1/imei/register', 
-                'url'      => \App\Services\CeirkuService::getOrderUrl(),
+                'endpoint' => 'POST /api (action: imeiservicelist)', 
+                'url'      => \App\Services\CeirkuService::getBaseUrl(),
                 'payload'  => [
-                    'service_id' => 21, // Test Status Unknown (Sandbox - Biaya Rp 0)
-                    'imeis'      => ['123456789012345']
+                    'username'     => $ceirUsername,
+                    'apiaccesskey' => $ceirApiKey,
+                    'action'       => 'imeiservicelist',
+                    'service_id'   => 21, // Test Status Unknown (Sandbox - Biaya Rp 0)
+                    'imeis'        => ['123456789012345']
                 ]
             ],
         ];
@@ -83,7 +97,9 @@ class ApiMonitorController extends Controller
             $detail = '';
 
             try {
-                $request = Http::timeout(5)->acceptJson();
+                $request = Http::timeout(5)->acceptJson()->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 ROMEI-Gateway/2.0',
+                ]);
                 if (!empty($ceirApiKey)) {
                     $request->withHeaders(['X-Api-Key' => $ceirApiKey]);
                 }
@@ -96,10 +112,21 @@ class ApiMonitorController extends Controller
                 $respMsg = $respJson['message'] ?? $respJson['error'] ?? null;
                 $errorCode = $respJson['error_code'] ?? null;
 
-                if ($response->successful() && ($respJson['status'] ?? true)) {
+                $isDhruSuccess = isset($respJson['SUCCESS']);
+                $isDhruError   = isset($respJson['ERROR']);
+                $isLegacySuccess = ($respJson['status'] ?? false) === true;
+
+                if ($response->successful() && ($isDhruSuccess || $isLegacySuccess || (!isset($respJson['status']) && !$isDhruError))) {
                     $status = 'online';
                     $detail = "Server CEIRKU operasional ({$latency}). Handshake sukses.";
                     Log::info("ROMEI MONITOR [{$api['name']}] - Jaringan OPERASIONAL ({$latency}). HTTP {$statusCode}");
+                } elseif ($isDhruError) {
+                    $status = 'warning';
+                    $errText = is_array($respJson['ERROR']) 
+                        ? ($respJson['ERROR'][0]['MESSAGE'] ?? $respJson['ERROR'][0]['message'] ?? 'Authentication Failed') 
+                        : (string)$respJson['ERROR'];
+                    $detail = "Jaringan terhubung ({$latency}). CEIRKU: {$errText}.";
+                    Log::warning("ROMEI MONITOR [{$api['name']}] - CEIRKU Respon ({$latency}): {$errText}");
                 } elseif ($statusCode >= 200 && $statusCode < 500) {
                     // Jaringan terhubung ke server CEIRKU (latensi terukur), namun ada pesan bisnis
                     $status = 'warning';

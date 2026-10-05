@@ -43,14 +43,99 @@ Artisan::command('romei:api-check', function (CeirkuService $ceirku, DokuService
         $this->error('[FAIL] API CEIRKU: Disconnected (' . $e->getMessage() . ')');
     }
 
-    // Cek DOKU
+    // Cek Payment Gateway
     try {
-        $dokuStatus = $doku->verifyPayment('PING-TEST');
-        $this->info('[OK] API DOKU: Connected');
+        $activeProvider = \App\Services\Payment\PaymentGatewayManager::getActiveProvider();
+        $this->info("[OK] Payment Gateway ({$activeProvider}): Configured & Ready");
     } catch (\Exception $e) {
-        $this->error('[FAIL] API DOKU: Disconnected (' . $e->getMessage() . ')');
+        $this->error('[FAIL] Payment Gateway: (' . $e->getMessage() . ')');
     }
-})->purpose('Check connection status for CEIRKU and DOKU APIs');
+})->purpose('Check connection status for CEIRKU and Payment Gateway APIs');
+
+/**
+ * Command: Artisan ceirku:sync-orders
+ * Melakukan polling status order IMEI ke CEIRKU sesuai pedoman (action: getimeiorder).
+ */
+Artisan::command('ceirku:sync-orders', function (CeirkuService $ceirku) {
+    $this->info('Memulai polling status order CEIRKU...');
+
+    $processingTransactions = Transaction::whereNotNull('metadata')
+        ->where('created_at', '>=', now()->subDays(7))
+        ->get()
+        ->filter(function ($tx) {
+            $metadata = $tx->metadata;
+            if (!is_array($metadata)) {
+                return false;
+            }
+            $status = strtoupper((string) ($metadata['ceirku_status'] ?? ''));
+            $orderId = $metadata['ceirku_order_id'] ?? null;
+            return $status === 'PROCESSING' && !empty($orderId) && $orderId !== 'N/A';
+        });
+
+    $this->info("Ditemukan {$processingTransactions->count()} transaksi dalam status PROCESSING.");
+
+    foreach ($processingTransactions as $tx) {
+        $metadata = $tx->metadata ?? [];
+        $orderId = $metadata['ceirku_order_id'] ?? null;
+        if (!$orderId || $orderId === 'N/A') {
+            continue;
+        }
+
+        $res = CeirkuService::getImeiOrder($orderId);
+        if (!$res['success']) {
+            $this->warn("Gagal memeriksa order #{$orderId}: " . ($res['message'] ?? 'Error'));
+            continue;
+        }
+
+        $status = $res['status']; // 'SUCCESS', 'FAILED', atau 'PROCESSING'
+        $code   = $res['code'] ?? '';
+
+        if ($status === 'SUCCESS') {
+            $metadata['ceirku_status'] = 'SUCCESS';
+            $metadata['ceirku_result'] = $code ?: 'Selesai / Terdaftar resmi';
+            $metadata['synced_at']     = now()->toDateTimeString();
+            $tx->update(['metadata' => $metadata]);
+
+            if ($tx->payable_type === ImeiRegistration::class && $tx->payable) {
+                $tx->payable()->update(['status' => 'approved', 'expired_at' => now()->addDays(90)]);
+            }
+
+            $this->info("Order #{$orderId} berhasil: {$code}");
+        } elseif ($status === 'FAILED') {
+            $metadata['ceirku_status'] = 'FAILED';
+            $metadata['ceirku_result'] = $code ?: 'Ditolak pusat';
+            $metadata['synced_at']     = now()->toDateTimeString();
+            $tx->update(['metadata' => $metadata]);
+
+            // Refund otomatis ke saldo wallet jika ditolak oleh pusat
+            $user = $tx->user;
+            if ($user && $user->wallet && $tx->amount > 0) {
+                $user->wallet->increment('balance', $tx->amount);
+                Transaction::create([
+                    'invoice_number' => 'REF-' . strtoupper(uniqid()),
+                    'amount'         => $tx->amount,
+                    'status'         => 'SUCCESS',
+                    'user_id'        => $user->id,
+                    'payable_type'   => \App\Models\Wallet::class,
+                    'payable_id'     => $user->wallet->id,
+                    'description'    => "Refund otomatis via penolakan order pusat #{$orderId}. Alasan: {$code}",
+                    'metadata'       => [
+                        'refund_from_invoice' => $tx->invoice_number,
+                        'ceirku_order_id'     => $orderId,
+                    ],
+                ]);
+            }
+
+            if ($tx->payable_type === ImeiRegistration::class && $tx->payable) {
+                $tx->payable()->update(['status' => 'rejected']);
+            }
+
+            $this->warn("Order #{$orderId} ditolak: {$code}");
+        }
+    }
+
+    $this->info('Polling status order CEIRKU selesai.');
+})->purpose('Poll CEIRKU order statuses using getimeiorder action');
 
 
 /*
@@ -115,3 +200,9 @@ Schedule::call(function () {
     
     Log::info('Scheduler: Pembersihan log lama selesai.');
 })->weekly();
+
+/**
+ * 4. Polling Status Order CEIRKU Secara Berkala (Setiap 5 Menit)
+ * Menjalankan getimeiorder untuk memperbarui status pesanan pending/processing.
+ */
+Schedule::command('ceirku:sync-orders')->everyFiveMinutes();

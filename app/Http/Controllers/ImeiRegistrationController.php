@@ -195,50 +195,33 @@ class ImeiRegistrationController extends Controller
                 ], 400);
             }
 
-            $mode   = Setting::get('ceirku_mode', 'sandbox'); 
-            $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = 'https://ceirku.net/api/v1/order'; 
+            $mode      = Setting::get('ceirku_mode', 'sandbox'); 
             $serviceId = ($mode === 'live') ? 30 : 20; 
 
-            // PIPELINE IMEI 1
-            $response1 = Http::withHeaders([
-                'X-Api-Key'    => $apiKey, 
-                'Content-Type' => 'application/json', 
-                'Accept'       => 'application/json',
-            ])->timeout(15)->post($apiUrl, [
-                'service_id' => $serviceId, 
-                'imeis'      => [ (string) $request->imei1 ] 
-            ]);
+            // PIPELINE IMEI 1 (Standar baru: placeimeiorder)
+            $res1 = \App\Services\CeirkuService::placeImeiOrder((string) $request->imei1, $serviceId);
 
-            if (!$response1->successful() || $response1->json('status') !== true) {
-                $msg1 = $response1->json('message') ?? 'API Server Pusat mendeteksi kegagalan data pada slot IMEI 1.';
+            if (!$res1['success']) {
+                $msg1 = $res1['message'] ?? 'API Server Pusat mendeteksi kegagalan data pada slot IMEI 1.';
                 return response()->json(['status' => 'error', 'message' => 'Gagal verifikasi IMEI 1: ' . $msg1], 422);
             }
 
-            $json1 = $response1->json('data');
-            $orderId1 = $json1['order_id'] ?? 'N/A';
+            $orderId1 = $res1['reference_id'] ?? $res1['order_id'] ?? 'N/A';
 
             // PIPELINE IMEI 2
             $orderId2 = null;
             if ($request->sim_type === 'dual' && $request->filled('imei2')) {
-                $response2 = Http::withHeaders([
-                    'X-Api-Key'    => $apiKey, 
-                    'Content-Type' => 'application/json', 
-                ])->timeout(15)->post($apiUrl, [
-                    'service_id' => $serviceId, 
-                    'imeis'      => [ (string) $request->imei2 ] 
-                ]);
+                $res2 = \App\Services\CeirkuService::placeImeiOrder((string) $request->imei2, $serviceId);
 
-                if (!$response2->successful() || $response2->json('status') !== true) {
-                    $msg2 = $response2->json('message') ?? 'API Server Pusat mendeteksi kegagalan data pada slot IMEI 2.';
+                if (!$res2['success']) {
+                    $msg2 = $res2['message'] ?? 'API Server Pusat mendeteksi kegagalan data pada slot IMEI 2.';
                     return response()->json([
                         'status'  => 'error', 
-                        'message' => 'IMEI 1 Berhasil Lolos (ID: '.$orderId1.'), namun pendaftaran IMEI 2 ditolak. Detail: ' . $msg2
+                        'message' => 'IMEI 1 Berhasil Lolos (ID: ' . $orderId1 . '), namun pendaftaran IMEI 2 ditolak. Detail: ' . $msg2
                     ], 422);
                 }
 
-                $json2 = $response2->json('data');
-                $orderId2 = $json2['order_id'] ?? 'N/A';
+                $orderId2 = $res2['reference_id'] ?? $res2['order_id'] ?? 'N/A';
             }
 
             // DB Execution
@@ -352,27 +335,17 @@ class ImeiRegistrationController extends Controller
                 return back()->withErrors(['message' => 'Saldo Wallet ROMEI Anda tidak mencukupi. Silakan lakukan Top Up terlebih dahulu.']);
             }
 
-            $mode   = Setting::get('ceirku_mode', 'sandbox'); 
-            $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = \App\Services\CeirkuService::getOrderUrl(); 
-
+            $mode      = Setting::get('ceirku_mode', 'sandbox'); 
             $serviceId = ($mode === 'live') ? 30 : 20; 
 
-            $response1 = Http::withHeaders([
-                'X-Api-Key'    => $apiKey, 
-                'Content-Type' => 'application/json', 
-                'Accept'       => 'application/json',
-            ])->timeout(12)->post($apiUrl, [
-                'service_id' => $serviceId, 
-                'imeis'      => [ (string) $request->imei ] 
-            ]);
+            $res1 = \App\Services\CeirkuService::placeImeiOrder((string) $request->imei, $serviceId);
 
-            if ($response1->successful() && $response1->json('status') === true) { 
-                $json1 = $response1->json('data'); 
-                $result1 = $json1['result'] ?? []; 
-                $statusKey = key($result1) ?? 'UNKNOWN'; 
+            if ($res1['success']) { 
+                $orderId1 = $res1['reference_id'] ?? $res1['order_id'] ?? 'N/A';
+                $code1 = $res1['data']['CODE'] ?? $res1['data']['code'] ?? null;
+                $statusKey = $code1 ?: (is_array($res1['data']['result'] ?? null) ? (key($res1['data']['result']) ?? 'CLEAN') : 'CLEAN');
 
-                DB::transaction(function () use ($wallet, $fee, $user, $request, $json1, $statusKey) {
+                DB::transaction(function () use ($wallet, $fee, $user, $request, $orderId1, $statusKey) {
                     $wallet->update(['balance' => $wallet->balance - $fee]);
                     Transaction::create([
                         'invoice_number' => 'FEESL-' . now()->format('YmdHis') . '-' . strtoupper(\Illuminate\Support\Str::random(3)), 
@@ -381,9 +354,9 @@ class ImeiRegistrationController extends Controller
                         'user_id'        => $user->id,
                         'payable_type'   => Wallet::class,
                         'payable_id'     => $wallet->id,
-                        'description'    => 'Pengecekan Jaringan SIM Lock IMEI 1: ' . $request->imei . ' (Order ID: ' . ($json1['order_id'] ?? 'N/A') . ')',
+                        'description'    => 'Pengecekan Jaringan SIM Lock IMEI 1: ' . $request->imei . ' (Order ID: ' . $orderId1 . ')',
                         'metadata'       => [
-                            'ceirku_order_id' => $json1['order_id'] ?? 'N/A',
+                            'ceirku_order_id' => $orderId1,
                             'ceirku_result'   => $statusKey,
                         ]
                     ]);
@@ -408,19 +381,14 @@ class ImeiRegistrationController extends Controller
                         ]);
                     }
 
-                    $response2 = Http::withHeaders([
-                        'X-Api-Key'    => $apiKey, 
-                        'Content-Type' => 'application/json', 
-                    ])->timeout(12)->post($apiUrl, [
-                        'service_id' => $serviceId, 
-                        'imeis'      => [ (string) $request->imei2 ] 
-                    ]);
+                    $res2 = \App\Services\CeirkuService::placeImeiOrder((string) $request->imei2, $serviceId);
 
-                    if ($response2->successful() && $response2->json('status') === true) {
-                        $json2 = $response2->json('data');
-                        $statusKey2 = key($json2['result'] ?? []) ?? 'UNKNOWN';
+                    if ($res2['success']) {
+                        $orderId2 = $res2['reference_id'] ?? $res2['order_id'] ?? 'N/A';
+                        $code2 = $res2['data']['CODE'] ?? $res2['data']['code'] ?? null;
+                        $statusKey2 = $code2 ?: (is_array($res2['data']['result'] ?? null) ? (key($res2['data']['result']) ?? 'CLEAN') : 'CLEAN');
 
-                        DB::transaction(function () use ($wallet, $fee, $user, $request, $json2, $statusKey2) {
+                        DB::transaction(function () use ($wallet, $fee, $user, $request, $orderId2, $statusKey2) {
                             $wallet->update(['balance' => $wallet->balance - $fee]);
                             Transaction::create([
                                 'invoice_number' => 'FEESL-' . now()->format('YmdHis') . '-' . strtoupper(\Illuminate\Support\Str::random(3)), 
@@ -431,7 +399,7 @@ class ImeiRegistrationController extends Controller
                                 'payable_id'     => $wallet->id,
                                 'description'    => 'Pengecekan Otomatis SIM Lock IMEI 2 Sekunder: ' . $request->imei2,
                                 'metadata'       => [
-                                    'ceirku_order_id' => $json2['order_id'] ?? 'N/A',
+                                    'ceirku_order_id' => $orderId2,
                                     'ceirku_result'   => $statusKey2,
                                 ]
                             ]);
@@ -503,27 +471,17 @@ class ImeiRegistrationController extends Controller
                 return back()->withErrors(['message' => 'Saldo Wallet ROMEI Anda tidak mencukupi untuk melakukan pengecekan history.']);
             }
 
-            $mode   = Setting::get('ceirku_mode', 'sandbox'); 
-            $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = \App\Services\CeirkuService::getOrderUrl(); 
-
+            $mode      = Setting::get('ceirku_mode', 'sandbox'); 
             $serviceId = ($mode === 'live') ? 31 : 23; 
 
-            $response = Http::withHeaders([
-                'X-Api-Key'    => $apiKey, 
-                'Content-Type' => 'application/json', 
-                'Accept'       => 'application/json',
-            ])->timeout(12)->post($apiUrl, [
-                'service_id' => $serviceId, 
-                'imeis'      => [ $request->imei ] 
-            ]);
+            $res = \App\Services\CeirkuService::placeImeiOrder((string) $request->imei, $serviceId);
 
-            if ($response->successful() && $response->json('status') === true) { 
-                $json = $response->json('data'); 
-                $resultData = $json['result'][0] ?? []; 
-                $historyLogs = $resultData['history'] ?? []; 
+            if ($res['success']) { 
+                $orderId = $res['reference_id'] ?? $res['order_id'] ?? 'N/A';
+                $resultData = $res['data']['result'][0] ?? $res['data']['result'] ?? []; 
+                $historyLogs = $resultData['history'] ?? $res['data']['history'] ?? []; 
 
-                DB::transaction(function () use ($wallet, $fee, $user, $request, $json, $historyLogs) {
+                DB::transaction(function () use ($wallet, $fee, $user, $request, $orderId, $historyLogs) {
                     $wallet->update(['balance' => $wallet->balance - $fee]);
                     
                     Transaction::create([
@@ -535,7 +493,7 @@ class ImeiRegistrationController extends Controller
                         'payable_id'     => $wallet->id,
                         'description'    => 'Pengecekan mandiri riwayat sinkronisasi database CEIR IMEI: ' . $request->imei,
                         'metadata'       => [
-                            'ceirku_order_id'    => $json['order_id'] ?? 'N/A',
+                            'ceirku_order_id'    => $orderId,
                             'ceirku_status'      => 'SUCCESS',
                             'ceirku_result'      => $historyLogs,
                             'instant_check'      => true,
@@ -613,22 +571,13 @@ class ImeiRegistrationController extends Controller
                 return back()->withErrors(['message' => 'Saldo Wallet ROMEI Anda tidak mencukupi untuk mengaktifkan paket Roamer 3 Bulan.']);
             }
 
-            $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = \App\Services\CeirkuService::getRoamerAddUrl(); 
+            $res = \App\Services\CeirkuService::placeImeiOrder((string) $request->imei, 36, ['months' => 3]);
 
-            $response = Http::withHeaders([
-                'X-Api-Key'    => $apiKey, 
-                'Content-Type' => 'application/json', 
-                'Accept'       => 'application/json',
-            ])->timeout(15)->post($apiUrl, [
-                'imei'   => (string) $request->imei, 
-                'months' => 3 
-            ]);
+            if ($res['success']) { 
+                $orderId = $res['reference_id'] ?? $res['order_id'] ?? 'N/A';
+                $json = $res['data'] ?? [];
 
-            if ($response->successful() && $response->json('status') === true) { 
-                $json = $response->json('data'); 
-
-                DB::transaction(function () use ($wallet, $fee, $user, $request, $json) {
+                DB::transaction(function () use ($wallet, $fee, $user, $request, $orderId) {
                     $wallet->update(['balance' => $wallet->balance - $fee]);
 
                     Transaction::create([
@@ -638,9 +587,9 @@ class ImeiRegistrationController extends Controller
                         'user_id'        => $user->id,
                         'payable_type'   => Wallet::class,
                         'payable_id'     => $wallet->id,
-                        'description'    => 'Aktivasi Paket Jaringan Add Roamer 3 Bulan untuk IMEI: ' . $request->imei . ' (Order ID: ' . ($json['order_id'] ?? 'N/A') . ')',
+                        'description'    => 'Aktivasi Paket Jaringan Add Roamer 3 Bulan untuk IMEI: ' . $request->imei . ' (Order ID: ' . $orderId . ')',
                         'metadata'       => [
-                            'ceirku_order_id' => $json['order_id'] ?? 'N/A',
+                            'ceirku_order_id' => $orderId,
                             'ceirku_status'   => 'PROCESSING',
                             'ceirku_result'   => 'Menunggu proses aktivasi operator pusat.',
                         ]
@@ -651,10 +600,10 @@ class ImeiRegistrationController extends Controller
                     'success_trigger' => true,
                     'roamer_details' => [
                         'imei'          => $json['imei'] ?? $request->imei, 
-                        'order_id'      => $json['order_id'] ?? 'N/A', 
+                        'order_id'      => $orderId, 
                         'cost_pusat'    => $json['cost'] ?? 75000, 
                         'order_status'  => $json['order_status'] ?? 'Pending', 
-                        'message'       => $response->json('message') ?? 'Pesanan Roamer berhasil dibuat.' 
+                        'message'       => $res['message'] ?? 'Pesanan Roamer berhasil dibuat.' 
                     ]
                 ]);
             }

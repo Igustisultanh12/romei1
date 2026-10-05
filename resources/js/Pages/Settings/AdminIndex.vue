@@ -24,7 +24,8 @@ const props = defineProps({
 
 const form = useForm({
     ceirku_mode: props.settings.ceirku_mode || 'sandbox',
-    ceirku_api_url: props.settings.ceirku_api_url || 'https://ceirku.net/api/v1',
+    ceirku_api_url: props.settings.ceirku_api_url || 'https://ceirku.org/api',
+    ceirku_username: props.settings.ceirku_username || 'Igshax12',
     ceirku_api_key: props.settings.ceirku_api_key || '',
     
     fee_check_sim_lock: props.settings.fee_check_sim_lock ?? 5000,
@@ -123,6 +124,7 @@ const testCeirkuConnection = async () => {
     try {
         const response = await axios.post(route('admin.settings.test-ceirku'), {
             ceirku_api_url: form.ceirku_api_url,
+            ceirku_username: form.ceirku_username,
             ceirku_api_key: form.ceirku_api_key
         });
 
@@ -367,7 +369,7 @@ const saveSettings = () => {
                                 <input 
                                     type="text" 
                                     v-model="form.ceirku_api_url" 
-                                    placeholder="https://ceirku.net/api/v1" 
+                                    placeholder="https://ceirku.org/api" 
                                     class="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                                 />
                                 <button 
@@ -381,7 +383,7 @@ const saveSettings = () => {
                                 </button>
                             </div>
                             <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                                Base URL gateway CEIRKU (contoh: <span class="font-mono text-blue-600 dark:text-blue-400">https://ceirku.net/api/v1</span>). Jika pihak vendor mengubah domain atau link API gateway, ubah langsung di sini dan lakukan pengujian koneksi tanpa perlu mengubah kode program.
+                                Base URL gateway CEIRKU (standar terbaru: <span class="font-mono text-blue-600 dark:text-blue-400">https://ceirku.org/api</span>). Sesuai pedoman integrasi reseller terbaru (actions: accountinfo, imeiservicelist, placeimeiorder, getimeiorder).
                             </p>
 
                             <!-- Live Test Result Banner -->
@@ -414,16 +416,33 @@ const saveSettings = () => {
                                     <option value="live">LIVE PRODUCTION (Komersial Asli)</option>
                                 </select>
                             </div>
-                            <div class="sm:col-span-2">
+                            <div>
                                 <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
-                                    CEIRKU X-Api-Key Reseller
+                                    Username Reseller CEIRKU
+                                </label>
+                                <input 
+                                    type="text" 
+                                    v-model="form.ceirku_username" 
+                                    placeholder="Contoh: Igshax12" 
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                />
+                                <div v-if="form.errors.ceirku_username" class="text-xs text-red-500 font-semibold mt-1">
+                                    {{ form.errors.ceirku_username }}
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
+                                    CEIRKU API Access Key Reseller
                                 </label>
                                 <input 
                                     type="password" 
                                     v-model="form.ceirku_api_key" 
-                                    placeholder="Masukkan token otentikasi X-Api-Key CEIRKU..." 
+                                    placeholder="Masukkan token API Access Key..." 
                                     class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                                 />
+                                <div v-if="form.errors.ceirku_api_key" class="text-xs text-red-500 font-semibold mt-1">
+                                    {{ form.errors.ceirku_api_key }}
+                                </div>
                             </div>
                         </div>
                     </div>

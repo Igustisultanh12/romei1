@@ -36,7 +36,8 @@ class SettingController extends Controller
 
                 // PENGATURAN INTEGRASI GATEWAY CEIRKU (SESUAI DOKUMEN RESMI)
                 'ceirku_mode'            => Setting::get('ceirku_mode', 'sandbox'), // sandbox atau live
-                'ceirku_api_url'         => Setting::get('ceirku_api_url', Setting::get('ceirku_url', 'https://ceirku.net/api/v1')),
+                'ceirku_api_url'         => Setting::get('ceirku_api_url', Setting::get('ceirku_url', 'https://ceirku.org/api')),
+                'ceirku_username'        => Setting::get('ceirku_username', 'Igshax12'),
                 'ceirku_api_key'         => Setting::get('ceirku_api_key', ''),
                 
                 // TARIF JASA DIAGNOSIS BERBAYAR (POTONG SALDO WALLET KONSUMEN ROMEI)
@@ -75,6 +76,7 @@ class SettingController extends Controller
             // Validasi Kredensial CEIRKU Pusat
             'ceirku_mode'            => 'required|in:sandbox,live',
             'ceirku_api_url'         => 'required|url',
+            'ceirku_username'        => 'nullable|string|max:100',
             'ceirku_api_key'         => 'nullable|string',
             
             // Validasi Skema Tarif Penjurnalan Finansial Wallet Konsumen
@@ -182,58 +184,25 @@ class SettingController extends Controller
     public function testCeirku(Request $request)
     {
         $request->validate([
-            'ceirku_api_url' => 'required|url',
-            'ceirku_api_key' => 'nullable|string',
+            'ceirku_api_url'  => 'required|url',
+            'ceirku_api_key'  => 'nullable|string',
+            'ceirku_username' => 'nullable|string',
         ]);
 
-        $rawUrl = rtrim(trim($request->ceirku_api_url), '/');
-        if (!str_contains($rawUrl, '/api/')) {
-            $rawUrl .= '/api/v1';
-        }
+        $result = \App\Services\CeirkuService::getAccountInfo(
+            $request->ceirku_api_url,
+            $request->ceirku_api_key,
+            $request->ceirku_username
+        );
 
-        $balanceUrl = $rawUrl . '/balance';
-        $startTime = microtime(true);
-
-        try {
-            $apiKey = $request->ceirku_api_key ?: Setting::get('ceirku_api_key', '');
-            $response = \Illuminate\Support\Facades\Http::timeout(6)
-                ->withHeaders([
-                    'X-Api-Key' => $apiKey,
-                    'Accept'    => 'application/json',
-                ])
-                ->post($balanceUrl);
-
-            $latency = round((microtime(true) - $startTime) * 1000) . 'ms';
-            $statusCode = $response->status();
-
-            if ($response->successful() || in_array($statusCode, [200, 401, 403])) {
-                $isAuthOk = $response->successful();
-                return response()->json([
-                    'success'     => true,
-                    'latency'     => $latency,
-                    'status_code' => $statusCode,
-                    'is_auth_ok'  => $isAuthOk,
-                    'message'     => $isAuthOk 
-                        ? "Gateway CEIRKU aktif & responsif ({$latency})! Kredensial valid." 
-                        : "Gateway CEIRKU terhubung ({$latency}, HTTP {$statusCode}). Pastikan API Key benar.",
-                ]);
-            }
-
-            return response()->json([
-                'success'     => false,
-                'latency'     => $latency,
-                'status_code' => $statusCode,
-                'message'     => "Server CEIRKU merespon status HTTP {$statusCode}.",
-            ], 422);
-
-        } catch (\Throwable $e) {
-            return response()->json([
-                'success'     => false,
-                'latency'     => '--',
-                'status_code' => 500,
-                'message'     => "Gagal terhubung ke {$rawUrl}: " . $e->getMessage(),
-            ], 422);
-        }
+        return response()->json([
+            'success'     => $result['success'],
+            'latency'     => $result['latency'],
+            'status_code' => $result['status_code'],
+            'is_auth_ok'  => $result['is_auth_ok'],
+            'credit'      => $result['credit'] ?? 0,
+            'message'     => $result['message'],
+        ], $result['success'] ? 200 : 422);
     }
 
     /**

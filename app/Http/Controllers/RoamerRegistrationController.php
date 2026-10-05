@@ -44,31 +44,22 @@ class RoamerRegistrationController extends Controller
                 ], 400);
             }
 
-            $apiKey = Setting::get('ceirku_api_key', 'YOUR_API_KEY'); 
-            $apiUrl = \App\Services\CeirkuService::getRoamerAddUrl();
-
-            // 2. Eksekusi API Pusat sesuai dokumentasi halaman 15
-            $response = Http::withHeaders([
-                'X-Api-Key'    => $apiKey,
-                'Content-Type' => 'application/json',
-                'Accept'       => 'application/json',
-            ])->timeout(15)->post($apiUrl, [
-                'imei'       => (string) $request->imei,
-                'service_id' => $serviceId
-            ]);
+            // 2. Eksekusi API Pusat via CeirkuService (action: placeimeiorder)
+            $res = \App\Services\CeirkuService::placeImeiOrder((string) $request->imei, $serviceId);
 
             // Tangani status bentrok antrean (Conflict - HTTP 409)
-            if ($response->status() === 409) {
+            if (($res['status_code'] ?? 200) === 409) {
                 return response()->json([
                     'status'  => 'error',
                     'message' => 'Pendaftaran ditolak! IMEI ini sudah dimasukkan ke sistem dan masih berstatus pending/proses.'
                 ], 409);
             }
 
-            if ($response->successful() && $response->json('status') === true) { 
-                $json = $response->json('data');
+            if ($res['success']) { 
+                $orderId = $res['reference_id'] ?? $res['order_id'] ?? 'N/A';
+                $json = $res['data'] ?? [];
 
-                DB::transaction(function () use ($wallet, $fee, $user, $request, $json, $serviceId) {
+                DB::transaction(function () use ($wallet, $fee, $user, $request, $orderId, $serviceId) {
                     // Potong Saldo Wallet Pengguna secara aman
                     $wallet->update(['balance' => $wallet->balance - $fee]);
 
@@ -82,9 +73,9 @@ class RoamerRegistrationController extends Controller
                         'user_id'        => $user->id,
                         'payable_type'   => Wallet::class,
                         'payable_id'     => $wallet->id,
-                        'description'    => 'Aktivasi ' . ($serviceId === 24 ? 'Add Roamer 1 Bulan' : 'Add Roamer 3 Bulan') . ' untuk IMEI: ' . $request->imei . ' (Order ID: ' . ($json['order_id'] ?? 'N/A') . ')',
+                        'description'    => 'Aktivasi ' . ($serviceId === 24 ? 'Add Roamer 1 Bulan' : 'Add Roamer 3 Bulan') . ' untuk IMEI: ' . $request->imei . ' (Order ID: ' . $orderId . ')',
                         'metadata'       => [
-                            'ceirku_order_id' => $json['order_id'] ?? 'N/A',
+                            'ceirku_order_id' => $orderId,
                             'ceirku_status'   => 'PROCESSING',
                             'ceirku_result'   => 'Menunggu proses aktivasi operator pusat.',
                         ]
@@ -92,17 +83,17 @@ class RoamerRegistrationController extends Controller
                 });
 
                 return response()->json([
-                    'status' => 'success',
-                    'message' => $response->json('message') ?? 'Pesanan Roamer berhasil dibuat dan sedang diproses oleh admin.',
-                    'data' => [
-                        'imei' => $json['imei'] ?? $request->imei,
-                        'order_id' => $json['order_id'] ?? 'N/A',
-                        'order_status' => $json['order_status'] ?? 'pending'
+                    'status'  => 'success',
+                    'message' => $res['message'] ?? 'Pesanan Roamer berhasil dibuat dan sedang diproses oleh admin.',
+                    'data'    => [
+                        'imei'         => (string) $request->imei,
+                        'order_id'     => $orderId,
+                        'order_status' => 'pending'
                     ]
                 ], 200);
             }
 
-            $errMessage = $response->json('message') ?? 'Server Jaringan Pusat menolak registrasi roamer.';
+            $errMessage = $res['message'] ?? 'Server Jaringan Pusat menolak registrasi roamer.';
             return response()->json(['status' => 'error', 'message' => 'Gagal mengaktifkan paket roamer: ' . $errMessage], 422);
 
         } catch (\Exception $e) {
