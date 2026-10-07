@@ -282,4 +282,132 @@ class CeirkuNewApiTest extends TestCase
             'description'  => 'Refund otomatis via penolakan order pusat #ORD-202. Alasan: BLACKLISTED_DEVICE',
         ]);
     }
+
+    public function test_check_sim_lock_status_handles_api_failure_without_undefined_variable(): void
+    {
+        $user = User::factory()->create();
+        $user->wallet()->create(['balance' => 50000]);
+
+        Http::fake([
+            'https://ceirku.org/api' => Http::response([
+                'ERROR' => [
+                    [
+                        'MESSAGE' => 'Layanan sedang maintenance atau OFF',
+                    ]
+                ],
+                'apiversion' => '8.2',
+            ], 200),
+        ]);
+
+        Setting::set('ceirku_api_url', 'https://ceirku.org/api');
+        Setting::set('ceirku_username', 'Igshax12');
+        Setting::set('ceirku_api_key', 'valid_key_123');
+
+        $response = $this->actingAs($user)
+            ->from('/dashboard')
+            ->post(route('services.sim-lock.check'), [
+                'imei' => '352416000000001',
+            ]);
+
+        $response->assertRedirect('/dashboard');
+        $response->assertSessionHasErrors('message');
+        $this->assertStringContainsString('Layanan sedang maintenance atau OFF', session('errors')->first('message'));
+    }
+
+    public function test_check_sim_lock_status_handles_success(): void
+    {
+        $user = User::factory()->create();
+        $wallet = $user->wallet()->create(['balance' => 50000]);
+
+        Http::fake([
+            'https://ceirku.org/api' => Http::response([
+                'SUCCESS' => [
+                    [
+                        'REFERENCEID' => 'SL-12345',
+                        'CODE'        => 'CLEAN_UNLOCKED',
+                        'message'     => 'SIM Lock check complete',
+                    ]
+                ],
+                'apiversion' => '8.2',
+            ], 200),
+        ]);
+
+        Setting::set('ceirku_api_url', 'https://ceirku.org/api');
+        Setting::set('ceirku_username', 'Igshax12');
+        Setting::set('ceirku_api_key', 'valid_key_123');
+        Setting::set('fee_check_sim_lock', 5000);
+
+        $response = $this->actingAs($user)
+            ->from('/dashboard')
+            ->post(route('services.sim-lock.check'), [
+                'imei' => '352416000000001',
+            ]);
+
+        $response->assertRedirect('/dashboard');
+        $response->assertSessionHas('flash.success_trigger', true);
+        $this->assertEquals(45000, $wallet->fresh()->balance);
+    }
+
+    public function test_check_ceir_history_handles_api_failure_without_undefined_variable(): void
+    {
+        $user = User::factory()->create();
+        $user->wallet()->create(['balance' => 50000]);
+
+        Http::fake([
+            'https://ceirku.org/api' => Http::response([
+                'ERROR' => [
+                    [
+                        'MESSAGE' => 'Tracking data tidak ditemukan',
+                    ]
+                ],
+                'apiversion' => '8.2',
+            ], 200),
+        ]);
+
+        Setting::set('ceirku_api_url', 'https://ceirku.org/api');
+        Setting::set('ceirku_username', 'Igshax12');
+        Setting::set('ceirku_api_key', 'valid_key_123');
+
+        $response = $this->actingAs($user)
+            ->from('/dashboard')
+            ->post(route('services.ceir-history.check'), [
+                'imei' => '352416000000001',
+            ]);
+
+        $response->assertRedirect('/dashboard');
+        $response->assertSessionHasErrors('message');
+        $this->assertStringContainsString('Tracking data tidak ditemukan', session('errors')->first('message'));
+    }
+
+    public function test_register_roamer_3m_handles_api_failure_without_undefined_variable(): void
+    {
+        $user = User::factory()->create();
+        $user->wallet()->create(['balance' => 200000]);
+
+        Http::fake([
+            'https://ceirku.org/api' => Http::response([
+                'ERROR' => [
+                    [
+                        'MESSAGE' => 'Roamer registration rejected',
+                    ]
+                ],
+                'apiversion' => '8.2',
+            ], 200),
+        ]);
+
+        Setting::set('ceirku_api_url', 'https://ceirku.org/api');
+        Setting::set('ceirku_username', 'Igshax12');
+        Setting::set('ceirku_api_key', 'valid_key_123');
+
+        $response = $this->actingAs($user)
+            ->from('/dashboard')
+            ->post(route('services.roamer-3m.register'), [
+                'imei' => '352416000000001',
+            ]);
+
+        $response->assertRedirect('/dashboard');
+        $response->assertSessionHasErrors('message');
+        $this->assertStringContainsString('Roamer registration rejected', session('errors')->first('message'));
+    }
 }
+

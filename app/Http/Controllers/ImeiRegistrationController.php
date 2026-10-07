@@ -444,7 +444,7 @@ class ImeiRegistrationController extends Controller
                 ]);
             }
 
-            $errMessage = $response1->json('message') ?? 'Server CEIRKU Pusat menolak memproses payload.'; 
+            $errMessage = $res1['message'] ?? $res1['error'] ?? 'Server CEIRKU Pusat menolak memproses payload.'; 
             return back()->withErrors(['message' => 'Layanan sedang maintenance sementara. Detail: ' . $errMessage]);
 
         } catch (\Exception $e) {
@@ -537,14 +537,14 @@ class ImeiRegistrationController extends Controller
                     'success_trigger' => true,
                     'ceir_history_details' => [
                         'imei'     => $request->imei,
-                        'order_id' => $json['order_id'] ?? 'N/A', 
+                        'order_id' => $orderId, 
                         'logs'     => $historyLogs, 
-                        'message'  => $response->json('message') ?? 'Log sinkronisasi berhasil ditarik.' 
+                        'message'  => $res['message'] ?? 'Log sinkronisasi berhasil ditarik.' 
                     ]
                 ]);
             }
 
-            $errMessage = $response->json('message') ?? 'Server CEIRKU Pusat menolak memproses tracking.'; 
+            $errMessage = $res['message'] ?? $res['error'] ?? 'Server CEIRKU Pusat menolak memproses tracking.'; 
             return back()->withErrors(['message' => 'Layanan sedang maintenance sementara. Detail: ' . $errMessage]);
 
         } catch (\Exception $e) {
@@ -608,7 +608,7 @@ class ImeiRegistrationController extends Controller
                 ]);
             }
 
-            $errMessage = $response->json('message') ?? 'Server Jaringan Pusat menolak registrasi roamer.'; 
+            $errMessage = $res['message'] ?? $res['error'] ?? 'Server Jaringan Pusat menolak registrasi roamer.'; 
             return back()->withErrors(['message' => 'Gagal mengaktifkan paket roamer: ' . $errMessage]);
 
         } catch (\Exception $e) {
